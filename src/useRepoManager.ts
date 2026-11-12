@@ -87,6 +87,8 @@ export function useRepoManager() {
     (roots: string[]) => changeWorkspace(() => api.openRecent(roots)),
     [changeWorkspace],
   );
+  const clearRecent = useCallback(() => changeWorkspace(api.clearRecent), [changeWorkspace]);
+  const reloadWorkspace = useCallback(() => changeWorkspace(api.loadWorkspace), [changeWorkspace]);
   const removeDirectory = useCallback(
     (path: string) => changeWorkspace(() => api.removeDirectory(path)),
     [changeWorkspace],
@@ -167,6 +169,8 @@ export function useRepoManager() {
     openDirectories,
     addDirectories,
     openRecent,
+    clearRecent,
+    reloadWorkspace,
     removeDirectory,
     rescan,
     removeRepos,

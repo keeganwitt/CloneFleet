@@ -7,7 +7,7 @@ import { applyTheme } from "../useSettings";
 import { SettingsDialog } from "./SettingsDialog";
 
 const view: SettingsView = {
-  settings: { gitPath: null, theme: "system" },
+  settings: { gitPath: null, theme: "system", reopenLast: true, rememberRecent: true },
   detectedGit: "/opt/homebrew/bin/git",
   activeGit: { path: "/opt/homebrew/bin/git", version: "git version 2.56.0", error: null },
 };
@@ -44,7 +44,12 @@ describe("SettingsDialog", () => {
     await user.click(screen.getByRole("radio", { name: "Dark" }));
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(onSave).toHaveBeenCalledWith({ gitPath: null, theme: "dark" });
+    expect(onSave).toHaveBeenCalledWith({
+      gitPath: null,
+      theme: "dark",
+      reopenLast: true,
+      rememberRecent: true,
+    });
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -61,7 +66,12 @@ describe("SettingsDialog", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("git version 2.40.0");
 
     await user.click(screen.getByRole("button", { name: "Save" }));
-    expect(onSave).toHaveBeenCalledWith({ gitPath: "/custom/git", theme: "system" });
+    expect(onSave).toHaveBeenCalledWith({
+      gitPath: "/custom/git",
+      theme: "system",
+      reopenLast: true,
+      rememberRecent: true,
+    });
   });
 
   it("shows a failing test and a rejected save", async () => {
@@ -79,6 +89,22 @@ describe("SettingsDialog", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("/bad is not a working git");
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("saves workspace preferences and warns that recent will be cleared", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsDialog view={view} onSave={onSave} onClose={() => {}} />);
+    await user.click(screen.getByLabelText("Reopen last directories at launch"));
+    await user.click(screen.getByLabelText("Remember recent directories"));
+    expect(screen.getByText("Saving clears the current recent list.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(onSave).toHaveBeenCalledWith({
+      gitPath: null,
+      theme: "system",
+      reopenLast: false,
+      rememberRecent: false,
+    });
   });
 
   it("closes with Escape or Cancel", async () => {

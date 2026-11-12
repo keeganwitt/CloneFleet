@@ -14,11 +14,24 @@ pub enum Theme {
     Dark,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppSettings {
     pub git_path: Option<PathBuf>,
     pub theme: Theme,
+    pub reopen_last: bool,
+    pub remember_recent: bool,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            git_path: None,
+            theme: Theme::System,
+            reopen_last: true,
+            remember_recent: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -142,6 +155,8 @@ mod tests {
         let settings: AppSettings = serde_json::from_str("{}").unwrap();
         assert_eq!(settings, AppSettings::default());
         assert_eq!(settings.theme, Theme::System);
+        assert!(settings.reopen_last);
+        assert!(settings.remember_recent);
         let dark: AppSettings = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
         assert_eq!(dark.theme, Theme::Dark);
     }

@@ -7,6 +7,7 @@ mod diff;
 mod discovery;
 mod fork;
 mod git;
+mod health;
 mod remotes;
 mod status;
 mod store;
@@ -29,6 +30,7 @@ use changes::FileChange;
 use cleanup::CleanupResult;
 use diff::{BranchDiff, FileDiff};
 use git::Git;
+use health::RepoHealth;
 use store::{BranchSettings, Config};
 use unpushed::UnpushedReport;
 use workspace::WorkspaceView;
@@ -45,7 +47,10 @@ struct AppState {
 
 impl AppState {
     fn new(config_path: PathBuf) -> std::io::Result<Self> {
-        let config = Config::load(&config_path)?;
+        let mut config = Config::load(&config_path)?;
+        if !config.settings.reopen_last {
+            config.close_all();
+        }
         Ok(Self {
             config_path,
             config: Mutex::new(config),
@@ -152,7 +157,12 @@ async fn set_settings(
             return Err(format!("{} is not a working git: {error}", path.display()));
         }
     }
-    state.update(|config| config.settings = settings)?;
+    state.update(|config| {
+        config.settings = settings;
+        if !config.settings.remember_recent {
+            config.clear_recent();
+        }
+    })?;
     Ok(state.settings_view().await)
 }
 
@@ -181,6 +191,11 @@ async fn open_recent(
     state: State<'_, AppState>,
 ) -> Result<WorkspaceView, String> {
     state.change_workspace(|config| config.open(roots)).await
+}
+
+#[tauri::command]
+async fn clear_recent(state: State<'_, AppState>) -> Result<WorkspaceView, String> {
+    state.change_workspace(Config::clear_recent).await
 }
 
 #[tauri::command]
@@ -374,6 +389,19 @@ async fn get_branch_settings(
 }
 
 #[tauri::command]
+async fn repo_health(
+    path: PathBuf,
+    stale_days: u32,
+    state: State<'_, AppState>,
+) -> Result<RepoHealth, String> {
+    let mut git = state.git(&path)?;
+    let _permit = state.permits.acquire().await.map_err(|e| e.to_string())?;
+    health::repo_health(&mut git, stale_days)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn branch_diff(
     path: PathBuf,
     branch: String,
@@ -417,6 +445,7 @@ pub fn run() {
             load_workspace,
             open_directories,
             open_recent,
+            clear_recent,
             add_directories,
             remove_directory,
             rescan_workspace,
@@ -433,6 +462,7 @@ pub fn run() {
             list_branch_names,
             get_branch_settings,
             set_branch_settings,
+            repo_health,
             branch_diff,
             working_file_diff
         ])
@@ -475,6 +505,21 @@ mod tests {
         let view = reloaded.rescan(config).await.unwrap();
         assert_eq!(view.repos, vec![root.join("two")]);
         assert_eq!(view.excluded_count, 1);
+    }
+
+    #[test]
+    fn starts_with_no_directories_open_when_reopening_is_disabled() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("config.json");
+        let mut config = Config::default();
+        config.open(vec!["/a".into()]);
+        config.settings.reopen_last = false;
+        config.save(&config_path).unwrap();
+
+        let state = AppState::new(config_path).unwrap();
+        let config = state.config.lock().unwrap();
+        assert!(config.roots.is_empty());
+        assert_eq!(config.recent, vec![vec![PathBuf::from("/a")]]);
     }
 
     #[test]

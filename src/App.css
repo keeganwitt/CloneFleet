@@ -598,3 +598,101 @@ input.days {
   overflow-wrap: anywhere;
   margin: 4px 0 0;
 }
+
+.layout {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 12px;
+}
+
+.sidebar button {
+  border: none;
+  text-align: left;
+  padding: 6px 10px;
+}
+
+.sidebar button[aria-current="page"] {
+  background: var(--selected);
+  font-weight: 600;
+}
+
+.dashboard-section h3 {
+  margin: 18px 0 8px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 8px;
+}
+
+.card-danger {
+  border-left-color: var(--danger);
+}
+
+.card-warning {
+  border-left-color: var(--warning);
+}
+
+.card-neutral {
+  border-left-color: var(--border);
+}
+
+.card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.card-repos {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.healthy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.path-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

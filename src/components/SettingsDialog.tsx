@@ -18,6 +18,8 @@ export function SettingsDialog({ view, onSave, onClose }: Props) {
   const [custom, setCustom] = useState(view.settings.gitPath !== null);
   const [gitPath, setGitPath] = useState(view.settings.gitPath ?? "");
   const [theme, setTheme] = useState<Theme>(view.settings.theme);
+  const [reopenLast, setReopenLast] = useState(view.settings.reopenLast);
+  const [rememberRecent, setRememberRecent] = useState(view.settings.rememberRecent);
   const [check, setCheck] = useState<GitInfo>();
   const [error, setError] = useState<string>();
 
@@ -37,7 +39,12 @@ export function SettingsDialog({ view, onSave, onClose }: Props) {
   };
   const save = async () => {
     try {
-      await onSave({ gitPath: custom && gitPath.trim() ? gitPath.trim() : null, theme });
+      await onSave({
+        gitPath: custom && gitPath.trim() ? gitPath.trim() : null,
+        theme,
+        reopenLast,
+        rememberRecent,
+      });
       onClose();
     } catch (failure) {
       setError(String(failure));
@@ -88,6 +95,28 @@ export function SettingsDialog({ view, onSave, onClose }: Props) {
             {active.version ? ` (${active.version})` : ""}
           </p>
           {active.error && <p className="error">{active.error}</p>}
+        </fieldset>
+        <fieldset>
+          <legend>Workspace</legend>
+          <label>
+            <input
+              type="checkbox"
+              checked={reopenLast}
+              onChange={(event) => setReopenLast(event.target.checked)}
+            />
+            Reopen last directories at launch
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={rememberRecent}
+              onChange={(event) => setRememberRecent(event.target.checked)}
+            />
+            Remember recent directories
+          </label>
+          {!rememberRecent && view.settings.rememberRecent && (
+            <p className="muted">Saving clears the current recent list.</p>
+          )}
         </fieldset>
         <fieldset>
           <legend>Theme</legend>

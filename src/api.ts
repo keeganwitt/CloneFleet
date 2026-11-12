@@ -12,6 +12,7 @@ import type {
   CleanupResult,
   FileChange,
   FileDiff,
+  RepoHealth,
   RepoSummary,
   UnpushedReport,
   WorkspaceView,
@@ -28,6 +29,7 @@ export const api = {
   loadWorkspace: () => invoke<WorkspaceView>("load_workspace"),
   openDirectories: (paths: string[]) => invoke<WorkspaceView>("open_directories", { paths }),
   openRecent: (roots: string[]) => invoke<WorkspaceView>("open_recent", { roots }),
+  clearRecent: () => invoke<WorkspaceView>("clear_recent"),
   addDirectories: (paths: string[]) => invoke<WorkspaceView>("add_directories", { paths }),
   removeDirectory: (path: string) => invoke<WorkspaceView>("remove_directory", { path }),
   rescanWorkspace: () => invoke<WorkspaceView>("rescan_workspace"),
@@ -50,6 +52,8 @@ export const api = {
   getBranchSettings: (path: string) => invoke<BranchSettings>("get_branch_settings", { path }),
   setBranchSettings: (path: string, settings: BranchSettings) =>
     invoke<void>("set_branch_settings", { path, settings }),
+  repoHealth: (path: string, staleDays: number) =>
+    invoke<RepoHealth>("repo_health", { path, staleDays }),
   branchDiff: (path: string, branch: string, base?: string) =>
     invoke<BranchDiff>("branch_diff", { path, branch, base: base ?? null }),
   workingFileDiff: (path: string, file: string, untracked: boolean) =>

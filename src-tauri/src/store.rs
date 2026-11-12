@@ -103,6 +103,8 @@ mod tests {
             settings: AppSettings {
                 git_path: Some(PathBuf::from("/opt/git")),
                 theme: crate::app_settings::Theme::Dark,
+                reopen_last: false,
+                remember_recent: false,
             },
         };
         config.save(&path).unwrap();

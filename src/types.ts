@@ -206,6 +206,8 @@ export type Theme = "system" | "light" | "dark";
 export interface AppSettings {
   gitPath: string | null;
   theme: Theme;
+  reopenLast: boolean;
+  rememberRecent: boolean;
 }
 
 export interface GitInfo {
@@ -218,4 +220,14 @@ export interface SettingsView {
   settings: AppSettings;
   detectedGit: string | null;
   activeGit: GitInfo;
+}
+
+export interface RepoHealth {
+  mergedBranches: number;
+  remoteDeletedBranches: number;
+  staleBranches: number;
+  removableWorktrees: number;
+  unpushedBranches: number;
+  stashes: number;
+  warnings: string[];
 }

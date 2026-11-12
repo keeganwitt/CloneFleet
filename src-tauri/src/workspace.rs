@@ -24,11 +24,30 @@ impl Config {
             return;
         }
         let previous = std::mem::replace(&mut self.roots, roots.clone());
-        self.recent.retain(|r| r != &roots && r != &previous);
-        if !previous.is_empty() {
-            self.recent.insert(0, previous);
+        self.recent.retain(|r| r != &roots);
+        self.remember(previous);
+    }
+
+    pub fn close_all(&mut self) {
+        let previous = std::mem::take(&mut self.roots);
+        self.remember(previous);
+    }
+
+    fn remember(&mut self, roots: Vec<PathBuf>) {
+        if !self.settings.remember_recent {
+            self.recent.clear();
+            return;
         }
+        if roots.is_empty() {
+            return;
+        }
+        self.recent.retain(|r| r != &roots);
+        self.recent.insert(0, roots);
         self.recent.truncate(MAX_RECENT);
+    }
+
+    pub fn clear_recent(&mut self) {
+        self.recent.clear();
     }
 
     pub fn add(&mut self, roots: Vec<PathBuf>) {
@@ -138,6 +157,30 @@ mod tests {
         }
         assert_eq!(config.recent.len(), MAX_RECENT);
         assert_eq!(config.recent[0], paths(&[&format!("/{}", MAX_RECENT + 1)]));
+    }
+
+    #[test]
+    fn not_remembering_recent_keeps_the_list_empty() {
+        let mut config = Config::default();
+        config.open(paths(&["/a"]));
+        config.open(paths(&["/b"]));
+        assert_eq!(config.recent, vec![paths(&["/a"])]);
+
+        config.settings.remember_recent = false;
+        config.open(paths(&["/c"]));
+        assert!(config.recent.is_empty());
+        assert_eq!(config.roots, paths(&["/c"]));
+    }
+
+    #[test]
+    fn close_all_moves_the_open_set_to_recent() {
+        let mut config = Config::default();
+        config.open(paths(&["/a", "/b"]));
+        config.close_all();
+        assert!(config.roots.is_empty());
+        assert_eq!(config.recent, vec![paths(&["/a", "/b"])]);
+        config.clear_recent();
+        assert!(config.recent.is_empty());
     }
 
     #[test]
