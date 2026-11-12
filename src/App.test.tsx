@@ -285,7 +285,7 @@ describe("App", () => {
     await renderRepositories();
     await user.click(await screen.findByLabelText("Select all"));
     await user.click(screen.getByRole("button", { name: "Checkout default branch" }));
-    await screen.findByText("2 files with uncommitted changes");
+    await within(screen.getByRole("table")).findByText("2 files with uncommitted changes");
 
     await user.click(screen.getByRole("button", { name: "Commit…" }));
     const submit = screen.getByRole("button", { name: "Commit" });
@@ -293,7 +293,7 @@ describe("App", () => {
     await user.type(screen.getByLabelText("Commit message for alpha"), "WIP");
     await user.click(submit);
 
-    expect(await screen.findByText("commit done")).toBeInTheDocument();
+    expect(await within(screen.getByRole("table")).findByText("commit done")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Stash" })).not.toBeInTheDocument();
     expect(actionCalls(calls)).toEqual([
       ["/src/alpha", { type: "checkoutDefault" }],
@@ -323,7 +323,7 @@ describe("App", () => {
     expect(bar).toHaveTextContent("(2 more hidden by filters)");
 
     await user.click(screen.getByRole("button", { name: "Pull" }));
-    await screen.findByText("pull done");
+    await within(screen.getByRole("table")).findByText("pull done");
     expect(actionCalls(calls)).toEqual([["/src/alpha", { type: "pull" }]]);
 
     await user.click(screen.getByRole("button", { name: "Clear filters" }));
@@ -406,7 +406,7 @@ describe("App", () => {
       expect(calls.filter((c) => c.cmd === "plugin:dialog|message")).toHaveLength(1),
     );
     await user.click(screen.getByRole("button", { name: "Push to origin" }));
-    expect(await screen.findByText("push done")).toBeInTheDocument();
+    expect(await within(screen.getByRole("table")).findByText("push done")).toBeInTheDocument();
     expect(calls.filter((c) => c.cmd === "plugin:dialog|message")).toHaveLength(1);
     expect(actionCalls(calls).filter(([, action]) => (action as Action).type === "push")).toEqual([
       ["/src/beta", { type: "push", plan: { ...plan, force: false, expectedRemoteSha: null } }],
@@ -421,7 +421,7 @@ describe("App", () => {
     const summariesBefore = calls.filter((c) => c.cmd === "repo_summary").length;
     await user.click(screen.getByRole("button", { name: "Fetch" }));
 
-    expect(await screen.findByText("fetch done")).toBeInTheDocument();
+    expect(await within(screen.getByRole("table")).findByText("fetch done")).toBeInTheDocument();
     expect(actionCalls(calls)).toEqual([["/src/alpha", { type: "fetch" }]]);
     await waitFor(() =>
       expect(calls.filter((c) => c.cmd === "repo_summary").length).toBe(summariesBefore + 1),
@@ -445,7 +445,9 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "Rename master → main" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Rename local branches" }));
 
-    expect(await screen.findByText("renameBranch done")).toBeInTheDocument();
+    expect(
+      await within(screen.getByRole("table")).findByText("renameBranch done"),
+    ).toBeInTheDocument();
     expect(actionCalls(calls).at(-1)).toEqual(["/src/alpha", rename]);
     expect(screen.queryByText(/default branch was renamed/)).not.toBeInTheDocument();
   });
@@ -563,6 +565,17 @@ describe("App", () => {
       expect(actionCalls(calls).at(-1)).toEqual(["/src/gamma", { type: "fetch" }]),
     );
     expect(await screen.findByText("alpha")).toBeInTheDocument();
+  });
+
+  it("shows the outcome message in the summary for a single-repository run", async () => {
+    const user = userEvent.setup();
+    mockBackend({ repos: ["/src/alpha"] });
+    await renderRepositories();
+    await user.click(await screen.findByRole("button", { name: "Select all 1" }));
+    await user.click(screen.getByRole("button", { name: "Pull" }));
+    const summary = await screen.findByRole("status", { name: "Last run" });
+    await waitFor(() => expect(summary).toHaveTextContent("1 succeeded"));
+    expect(summary).toHaveTextContent("pull done");
   });
 
   it("cancels a running bulk action", async () => {

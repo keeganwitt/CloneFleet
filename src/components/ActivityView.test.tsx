@@ -2,16 +2,16 @@ import { mockIPC } from "@tauri-apps/api/mocks";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
-import { clearLog, recordCommands } from "../activityLog";
+import { clearLog, recordAction } from "../activityLog";
 import { ActivityView } from "./ActivityView";
 
 afterEach(() => clearLog());
 
 function seed() {
-  recordCommands("/src/api", "Fetch", [
+  recordAction("/src/api", "Fetch", { status: "succeeded", message: "Fetched origin" }, [
     { args: ["fetch", "--prune", "origin"], exitCode: 0, stdout: "", stderr: "" },
   ]);
-  recordCommands("/src/web", "Pull", [
+  recordAction("/src/web", "Pull", { status: "failed", message: "main has diverged" }, [
     {
       args: ["pull", "--ff-only"],
       exitCode: 1,
@@ -21,21 +21,28 @@ function seed() {
   ]);
 }
 
+function entries() {
+  const log = screen.getByRole("list", { name: "Activity log" });
+  return within(log)
+    .getAllByRole("listitem")
+    .filter((item) => item.parentElement === log);
+}
+
 describe("ActivityView", () => {
-  it("lists commands, filters to failures, and searches output", async () => {
+  it("lists one entry per action, filters to failures, and searches commands", async () => {
     const user = userEvent.setup();
     seed();
     render(<ActivityView onClose={() => {}} />);
-    const log = screen.getByRole("list", { name: "Activity log" });
-    expect(within(log).getAllByRole("listitem")).toHaveLength(2);
-    expect(within(log).getByText("git pull --ff-only")).toBeInTheDocument();
+    expect(entries()).toHaveLength(2);
+    expect(screen.getByText("main has diverged")).toHaveClass("outcome-failed");
+    expect(screen.getByText("git pull --ff-only")).toBeInTheDocument();
 
     await user.click(screen.getByLabelText("Failures only"));
-    expect(within(log).getAllByRole("listitem")).toHaveLength(1);
+    expect(entries()).toHaveLength(1);
     await user.click(screen.getByLabelText("Failures only"));
     await user.type(screen.getByLabelText("Search activity"), "prune");
-    expect(within(log).getAllByRole("listitem")).toHaveLength(1);
-    expect(within(log).getByText("api")).toBeInTheDocument();
+    expect(entries()).toHaveLength(1);
+    expect(screen.getByText("api")).toBeInTheDocument();
     expect(screen.getByText("1 of 2")).toBeInTheDocument();
   });
 
@@ -44,7 +51,7 @@ describe("ActivityView", () => {
     render(<ActivityView onClose={() => {}} />);
     expect(screen.getByText("Nothing has run yet.")).toBeInTheDocument();
     act(() => seed());
-    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByText("Fetched origin")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Clear" }));
     expect(screen.getByText("Nothing has run yet.")).toBeInTheDocument();
   });
@@ -65,7 +72,9 @@ describe("ActivityView", () => {
     expect(await screen.findByText("Saved 2 entries")).toBeInTheDocument();
     const saved = calls.find((c) => c.cmd === "save_text_file")?.args;
     expect(saved?.path).toBe("/tmp/activity.log");
-    expect(saved?.contents).toContain("$ git pull --ff-only\nexit 1\nNot possible to fast-forward");
+    expect(saved?.contents).toContain(
+      "$ git pull --ff-only  (exit 1)\n    Not possible to fast-forward",
+    );
     await waitFor(() => expect(calls.map((c) => c.cmd)).toContain("plugin:dialog|save"));
   });
 });

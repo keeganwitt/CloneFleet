@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { recordCommands } from "../activityLog";
+import { recordAction, summarizeItems } from "../activityLog";
 import { api } from "../api";
 import {
   BRANCH_CATEGORIES,
@@ -71,6 +71,7 @@ export function CleanupView({ paths, onClose, onChanged, onOpenBranch }: Props) 
   const [deleteWorktreeBranches, setDeleteWorktreeBranches] = useState(true);
   const [results, setResults] = useState<Record<string, ItemOutcome[]>>({});
   const [busy, setBusy] = useState(false);
+  const [hideEmpty, setHideEmpty] = useState(true);
   const [nowUnix, setNowUnix] = useState(currentUnixTime);
 
   const applyReport = useCallback((repo: string, cleanup: RepoCleanup) => {
@@ -127,6 +128,17 @@ export function CleanupView({ paths, onClose, onChanged, onOpenBranch }: Props) 
       if (worktreeState(worktree).removable) removableWorktreeKeys.add(key(repo, worktree.path));
     }
   }
+  const emptyRepos = new Set(
+    paths.filter((repo) => {
+      const cleanup = reports[repo];
+      if (cleanup?.status !== "loaded" || results[repo]?.length) return false;
+      const hasBranches = cleanup.report.branches.some((branch) =>
+        shown.has(categorizeBranch(branch, nowUnix, staleDays)),
+      );
+      const hasWorktrees = cleanup.report.worktrees.some((w) => !w.isMain);
+      return !hasBranches && !hasWorktrees && cleanup.report.warnings.length === 0;
+    }),
+  );
   const branchTargets = [...selectedBranches].filter((k) => visibleBranchKeys.has(k));
   const worktreeTargets = [...selectedWorktrees].filter((k) => removableWorktreeKeys.has(k));
   const unmergedTargets = branchTargets.filter((k) => unmergedBranchKeys.has(k));
@@ -183,7 +195,7 @@ export function CleanupView({ paths, onClose, onChanged, onOpenBranch }: Props) 
     await applyCleanup(branchTargets, async (repo, names) => {
       const allowUnmerged = names.some((name) => unmerged.has(key(repo, name)));
       const result = await api.deleteBranches(repo, names, allowUnmerged);
-      recordCommands(repo, "Delete branches", result.commands);
+      recordAction(repo, "Delete branches", summarizeItems(result.items), result.commands);
       return result.items;
     });
   };
@@ -194,7 +206,7 @@ export function CleanupView({ paths, onClose, onChanged, onOpenBranch }: Props) 
     if (!(await api.confirmDestructive(message, "Remove worktrees"))) return;
     await applyCleanup(worktreeTargets, async (repo, worktrees) => {
       const result = await api.removeWorktrees(repo, worktrees, deleteWorktreeBranches);
-      recordCommands(repo, "Remove worktrees", result.commands);
+      recordAction(repo, "Remove worktrees", summarizeItems(result.items), result.commands);
       return result.items;
     });
   };
@@ -268,33 +280,49 @@ export function CleanupView({ paths, onClose, onChanged, onOpenBranch }: Props) 
           />
           Also delete merged worktree branches
         </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={hideEmpty}
+            onChange={(event) => setHideEmpty(event.target.checked)}
+          />
+          Hide repositories with nothing to clean up
+        </label>
       </div>
 
-      {paths.map((repo) => (
-        <RepoCleanupSection
-          key={repo}
-          repo={repo}
-          cleanup={reports[repo]}
-          results={results[repo]}
-          nowUnix={nowUnix}
-          staleDays={staleDays}
-          shown={shown}
-          selectedBranches={selectedBranches}
-          selectedWorktrees={selectedWorktrees}
-          onOpenBranch={onOpenBranch && ((branch) => onOpenBranch(repo, branch))}
-          onSetBranches={(names, selected) =>
-            setSelectedBranches((current) => {
-              const next = new Set(current);
-              for (const branch of names) {
-                if (selected) next.add(key(repo, branch));
-                else next.delete(key(repo, branch));
-              }
-              return next;
-            })
-          }
-          onToggleWorktree={(path) => toggle(setSelectedWorktrees, key(repo, path))}
-        />
-      ))}
+      {hideEmpty && emptyRepos.size > 0 && (
+        <p className="muted">
+          {emptyRepos.size} {emptyRepos.size === 1 ? "repository has" : "repositories have"} nothing
+          to clean up in the selected categories.
+        </p>
+      )}
+      {paths
+        .filter((repo) => !hideEmpty || !emptyRepos.has(repo))
+        .map((repo) => (
+          <RepoCleanupSection
+            key={repo}
+            repo={repo}
+            cleanup={reports[repo]}
+            results={results[repo]}
+            nowUnix={nowUnix}
+            staleDays={staleDays}
+            shown={shown}
+            selectedBranches={selectedBranches}
+            selectedWorktrees={selectedWorktrees}
+            onOpenBranch={onOpenBranch && ((branch) => onOpenBranch(repo, branch))}
+            onSetBranches={(names, selected) =>
+              setSelectedBranches((current) => {
+                const next = new Set(current);
+                for (const branch of names) {
+                  if (selected) next.add(key(repo, branch));
+                  else next.delete(key(repo, branch));
+                }
+                return next;
+              })
+            }
+            onToggleWorktree={(path) => toggle(setSelectedWorktrees, key(repo, path))}
+          />
+        ))}
     </div>
   );
 }

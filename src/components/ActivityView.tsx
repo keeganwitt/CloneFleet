@@ -37,7 +37,7 @@ export function ActivityView({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <p className="muted">
-        Every git command CloneFleet ran to change a repository during this session.
+        Every action CloneFleet ran during this session. Expand one to see its git commands.
       </p>
       <div className="toolbar">
         <input
@@ -70,24 +70,34 @@ export function ActivityView({ onClose }: { onClose: () => void }) {
         </p>
       ) : (
         <ol className="activity-log" aria-label="Activity log">
-          {shown.slice(0, MAX_SHOWN).map((entry) => {
-            const { args, exitCode, stdout, stderr } = entry.command;
-            const output = [stdout.trim(), stderr.trim()].filter(Boolean).join("\n");
-            return (
-              <li key={entry.id} className={entryFailed(entry) ? "command-failed" : undefined}>
-                <details>
-                  <summary>
-                    <span className="muted">{new Date(entry.timeMs).toLocaleTimeString()}</span>
-                    <strong title={entry.repo}>{basename(entry.repo)}</strong>
-                    <span className="muted">{entry.label}</span>
-                    <code>git {args.join(" ")}</code>
-                    <span className="exit-code">exit {exitCode ?? "signal"}</span>
-                  </summary>
-                  {output ? <pre>{output}</pre> : <p className="muted">No output.</p>}
-                </details>
-              </li>
-            );
-          })}
+          {shown.slice(0, MAX_SHOWN).map((entry) => (
+            <li key={entry.id}>
+              <details>
+                <summary>
+                  <span className="muted">{new Date(entry.timeMs).toLocaleTimeString()}</span>
+                  <strong title={entry.repo}>{basename(entry.repo)}</strong>
+                  <span>{entry.label}</span>
+                  <span className={`outcome-${entry.status}`}>{entry.message}</span>
+                </summary>
+                {entry.commands.length === 0 ? (
+                  <p className="muted">No git commands ran.</p>
+                ) : (
+                  <ol className="command-log">
+                    {entry.commands.map((command, index) => (
+                      <li key={index}>
+                        <code>git {command.args.join(" ")}</code>
+                        <span className="exit-code">exit {command.exitCode ?? "signal"}</span>
+                        {command.stdout.trim() && <pre>{command.stdout.trim()}</pre>}
+                        {command.stderr.trim() && (
+                          <pre className="muted">{command.stderr.trim()}</pre>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </details>
+            </li>
+          ))}
         </ol>
       )}
       {shown.length > MAX_SHOWN && (

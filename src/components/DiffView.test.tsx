@@ -29,17 +29,19 @@ describe("DiffView", () => {
     render(<DiffView patch={patch} truncated />);
     const lines = within(screen.getByLabelText("Diff")).getAllByText(/./);
     const kinds = lines.map((line) => line.className.replace("diff-line diff-", ""));
-    expect(kinds).toEqual([
-      "header",
-      "header",
-      "header",
-      "hunk",
-      "context",
-      "delete",
-      "add",
-      "note",
-    ]);
+    expect(kinds).toEqual(["hunk", "context", "delete", "add", "note"]);
     expect(screen.getByText(/Diff truncated/)).toBeInTheDocument();
+  });
+
+  it("keeps binary notices from the file header", () => {
+    render(
+      <DiffView
+        patch={"diff --git a/x.png b/x.png\nindex 1..2\nBinary files a/x.png and b/x.png differ\n"}
+        truncated={false}
+      />,
+    );
+    expect(screen.getByText("Binary files a/x.png and b/x.png differ")).toBeInTheDocument();
+    expect(screen.queryByText(/^index /)).not.toBeInTheDocument();
   });
 
   it("handles empty patches", () => {

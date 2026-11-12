@@ -60,6 +60,14 @@ function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+export function formatRecent(nowUnix: number, thenUnix: number): string {
+  const seconds = Math.max(0, nowUnix - thenUnix);
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h ago`;
+  return formatAge(nowUnix, thenUnix);
+}
+
 export function formatAge(nowUnix: number, thenUnix: number): string {
   const days = Math.floor((nowUnix - thenUnix) / DAY_SECONDS);
   if (days < 1) return "today";

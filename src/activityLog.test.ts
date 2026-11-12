@@ -6,7 +6,8 @@ import {
   entryFailed,
   formatLog,
   matchesLogSearch,
-  recordCommands,
+  recordAction,
+  summarizeItems,
   useActivityLog,
 } from "./activityLog";
 import type { CommandRecord } from "./types";
@@ -20,55 +21,79 @@ const command = (args: string[], exitCode = 0, stderr = ""): CommandRecord => ({
 
 afterEach(() => clearLog());
 
-describe("activity log", () => {
-  it("records commands newest first and notifies subscribers", () => {
-    const { result } = renderHook(() => useActivityLog());
-    act(() => recordCommands("/a", "Fetch", [command(["fetch", "origin"])]));
-    act(() =>
-      recordCommands("/b", "Pull", [command(["status"]), command(["pull"], 1, "diverged")]),
-    );
-    expect(result.current.map((e) => [e.repo, e.command.args[0]])).toEqual([
-      ["/b", "pull"],
-      ["/b", "status"],
-      ["/a", "fetch"],
-    ]);
-    expect(result.current.filter(entryFailed).map((e) => e.command.args[0])).toEqual(["pull"]);
-  });
-
-  it("ignores empty records and caps the log", () => {
-    const { result } = renderHook(() => useActivityLog());
-    act(() => recordCommands("/a", "Fetch", []));
-    expect(result.current).toEqual([]);
-    act(() =>
-      recordCommands(
-        "/a",
-        "Fetch",
-        Array.from({ length: MAX_ENTRIES + 5 }, (_, i) => command([`c${i}`])),
-      ),
-    );
-    expect(result.current).toHaveLength(MAX_ENTRIES);
-    expect(result.current[0].command.args[0]).toBe(`c${MAX_ENTRIES + 4}`);
-  });
-
-  it("searches repo, label, arguments, and output", () => {
-    recordCommands("/src/api", "Pull", [command(["pull", "--ff-only"], 1, "Not possible")]);
-    const [entry] = logSnapshot();
-    expect(matchesLogSearch(entry, "api ff-only")).toBe(true);
-    expect(matchesLogSearch(entry, "not possible")).toBe(true);
-    expect(matchesLogSearch(entry, "web")).toBe(false);
-    expect(matchesLogSearch(entry, "  ")).toBe(true);
-  });
-
-  it("formats the log oldest first for export", () => {
-    recordCommands("/a", "Fetch", [command(["fetch"])]);
-    recordCommands("/b", "Pull", [command(["pull"], 1, "boom")]);
-    const text = formatLog(logSnapshot());
-    expect(text.indexOf("$ git fetch")).toBeLessThan(text.indexOf("$ git pull"));
-    expect(text).toContain("/b (Pull)\n$ git pull\nexit 1\nboom");
-  });
-});
-
 function logSnapshot() {
   const { result } = renderHook(() => useActivityLog());
   return result.current;
 }
+
+describe("activity log", () => {
+  it("records one entry per action, newest first, using the outcome for failures", () => {
+    const { result } = renderHook(() => useActivityLog());
+    act(() =>
+      recordAction("/a", "Checkout default branch", { status: "succeeded", message: "Switched" }, [
+        command(["show-ref", "--verify", "--quiet", "refs/heads/main"], 1),
+        command(["switch", "main"]),
+      ]),
+    );
+    act(() =>
+      recordAction("/b", "Pull", { status: "failed", message: "diverged" }, [
+        command(["pull"], 1, "Not possible"),
+      ]),
+    );
+    expect(result.current.map((e) => [e.repo, e.label])).toEqual([
+      ["/b", "Pull"],
+      ["/a", "Checkout default branch"],
+    ]);
+    expect(result.current.filter(entryFailed).map((e) => e.repo)).toEqual(["/b"]);
+    expect(result.current[1].commands).toHaveLength(2);
+  });
+
+  it("skips no-op entries but keeps failures without commands, and caps the log", () => {
+    const { result } = renderHook(() => useActivityLog());
+    act(() => recordAction("/a", "Fetch", { status: "succeeded", message: "" }, []));
+    expect(result.current).toEqual([]);
+    act(() => recordAction("/a", "Fetch", { status: "failed", message: "not in list" }, []));
+    expect(result.current).toHaveLength(1);
+    act(() => {
+      for (let i = 0; i < MAX_ENTRIES + 3; i++) {
+        recordAction("/a", "Fetch", { status: "succeeded", message: `${i}` }, [command(["x"])]);
+      }
+    });
+    expect(result.current).toHaveLength(MAX_ENTRIES);
+    expect(result.current[0].message).toBe(`${MAX_ENTRIES + 2}`);
+  });
+
+  it("searches repo, label, message, arguments, and output", () => {
+    recordAction("/src/api", "Pull", { status: "failed", message: "diverged from upstream" }, [
+      command(["pull", "--ff-only"], 1, "Not possible"),
+    ]);
+    const [entry] = logSnapshot();
+    expect(matchesLogSearch(entry, "api ff-only")).toBe(true);
+    expect(matchesLogSearch(entry, "not possible")).toBe(true);
+    expect(matchesLogSearch(entry, "diverged")).toBe(true);
+    expect(matchesLogSearch(entry, "web")).toBe(false);
+  });
+
+  it("formats the log oldest first with indented commands", () => {
+    recordAction("/a", "Fetch", { status: "succeeded", message: "Fetched origin" }, [
+      command(["fetch"]),
+    ]);
+    recordAction("/b", "Pull", { status: "failed", message: "boom" }, [
+      command(["pull"], 1, "err"),
+    ]);
+    const text = formatLog(logSnapshot());
+    expect(text.indexOf("Fetched origin")).toBeLessThan(text.indexOf("boom"));
+    expect(text).toContain("/b — Pull: failed\nboom\n  $ git pull  (exit 1)\n    err");
+  });
+
+  it("summarizes cleanup item results", () => {
+    expect(
+      summarizeItems([
+        { status: "succeeded", message: "Deleted a" },
+        { status: "skipped", message: "b is protected" },
+      ]),
+    ).toEqual({ status: "succeeded", message: "Deleted a; b is protected" });
+    expect(summarizeItems([{ status: "skipped", message: "x" }]).status).toBe("skipped");
+    expect(summarizeItems([{ status: "failed", message: "x" }]).status).toBe("failed");
+  });
+});

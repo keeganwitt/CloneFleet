@@ -29,11 +29,13 @@ export function DiffView({ patch, truncated }: { patch: string; truncated: boole
   return (
     <>
       <pre className="diff" aria-label="Diff">
-        {classifyPatch(patch).map(([line, kind], index) => (
-          <div key={index} className={`diff-line diff-${kind}`}>
-            {line || " "}
-          </div>
-        ))}
+        {classifyPatch(patch)
+          .filter(([line, kind]) => kind !== "header" || line.startsWith("Binary files"))
+          .map(([line, kind], index) => (
+            <div key={index} className={`diff-line diff-${kind}`}>
+              {line || " "}
+            </div>
+          ))}
       </pre>
       {truncated && <p className="muted">Diff truncated; it is too large to show in full.</p>}
     </>

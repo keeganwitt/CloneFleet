@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "./api";
-import { formatAge } from "./cleanup";
+import { formatRecent } from "./cleanup";
 import { ActionBar } from "./components/ActionBar";
 import { ActivityView } from "./components/ActivityView";
 import { CleanupView } from "./components/CleanupView";
@@ -258,6 +258,11 @@ function App() {
                   manager.dismissLastRun();
                 }}
                 cancelled={manager.lastRun.cancelled}
+                detail={
+                  manager.lastRun.paths.length === 1 && runSummary.running === 0
+                    ? state.repos[manager.lastRun.paths[0]]?.result?.outcome.message
+                    : undefined
+                }
                 onCancel={manager.cancelLastRun}
               />
             )}
@@ -372,7 +377,7 @@ function App() {
                     >
                       {freshness.oldestFetchUnix === null
                         ? "Never fetched"
-                        : `Oldest fetch ${formatAge(nowUnix, freshness.oldestFetchUnix)}`}
+                        : `Oldest fetch ${formatRecent(nowUnix, freshness.oldestFetchUnix)}`}
                       {freshness.neverFetched > 0 &&
                         freshness.oldestFetchUnix !== null &&
                         ` · ${freshness.neverFetched} never fetched`}
@@ -402,10 +407,10 @@ function App() {
                 <table className="repo-table">
                   <colgroup>
                     <col style={{ width: "36px" }} />
-                    <col style={{ width: "30%" }} />
-                    <col style={{ width: "19%" }} />
-                    <col style={{ width: "14%" }} />
-                    <col style={{ width: "11%" }} />
+                    <col style={{ width: "27%" }} />
+                    <col style={{ width: "17%" }} />
+                    <col style={{ width: "15%" }} />
+                    <col style={{ width: "16%" }} />
                     <col />
                     <col style={{ width: "72px" }} />
                   </colgroup>

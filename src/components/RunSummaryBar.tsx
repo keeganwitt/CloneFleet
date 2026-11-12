@@ -14,6 +14,7 @@ interface Props {
   onDismiss: () => void;
   cancelled?: boolean;
   onCancel?: () => void;
+  detail?: string;
 }
 
 export function RunSummaryBar({
@@ -24,6 +25,7 @@ export function RunSummaryBar({
   onDismiss,
   cancelled,
   onCancel,
+  detail,
 }: Props) {
   const statuses = (Object.keys(STATUS_LABELS) as RunStatus[]).filter(
     (status) => summary.byStatus[status].length > 0,
@@ -56,6 +58,7 @@ export function RunSummaryBar({
           </button>
         ))}
         {reasons && <span className="muted">({reasons})</span>}
+        {detail && <span>{detail}</span>}
         {activeStatus && (
           <button className="link" onClick={() => onShowStatus(undefined)}>
             Show all

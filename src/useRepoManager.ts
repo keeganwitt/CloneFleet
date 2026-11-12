@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { api } from "./api";
 import { ACTION_LABELS } from "./actionLabels";
-import { recordCommands } from "./activityLog";
+import { recordAction } from "./activityLog";
 import { basename } from "./format";
 import type { Run } from "./runSummary";
 import { initialState, reducer } from "./state";
@@ -129,7 +129,7 @@ export function useRepoManager() {
               commands: [],
             };
           }
-          recordCommands(path, ACTION_LABELS[action.type], result.commands);
+          recordAction(path, ACTION_LABELS[action.type], result.outcome, result.commands);
           dispatch({ type: "actionFinished", path, result });
           await refreshSummary(path);
         }),

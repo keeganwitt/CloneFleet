@@ -1,15 +1,19 @@
 import { useSyncExternalStore } from "react";
-import type { CommandRecord } from "./types";
+import type { CommandRecord, Outcome } from "./types";
+
+export type EntryStatus = Outcome["status"];
 
 export interface LogEntry {
   id: number;
   timeMs: number;
   repo: string;
   label: string;
-  command: CommandRecord;
+  status: EntryStatus;
+  message: string;
+  commands: CommandRecord[];
 }
 
-export const MAX_ENTRIES = 5000;
+export const MAX_ENTRIES = 2000;
 
 let entries: LogEntry[] = [];
 let nextId = 1;
@@ -19,12 +23,36 @@ function emit() {
   for (const listener of listeners) listener();
 }
 
-export function recordCommands(repo: string, label: string, commands: CommandRecord[]) {
-  if (commands.length === 0) return;
-  const timeMs = Date.now();
-  const added = commands.map((command) => ({ id: nextId++, timeMs, repo, label, command }));
-  entries = [...added.reverse(), ...entries].slice(0, MAX_ENTRIES);
+export function recordAction(
+  repo: string,
+  label: string,
+  outcome: { status: EntryStatus; message: string },
+  commands: CommandRecord[],
+) {
+  if (commands.length === 0 && outcome.status !== "failed") return;
+  const entry: LogEntry = {
+    id: nextId++,
+    timeMs: Date.now(),
+    repo,
+    label,
+    status: outcome.status,
+    message: outcome.message,
+    commands,
+  };
+  entries = [entry, ...entries].slice(0, MAX_ENTRIES);
   emit();
+}
+
+export function summarizeItems(items: { status: EntryStatus; message: string }[]): {
+  status: EntryStatus;
+  message: string;
+} {
+  const status = items.some((i) => i.status === "failed")
+    ? "failed"
+    : items.every((i) => i.status === "skipped")
+      ? "skipped"
+      : "succeeded";
+  return { status, message: items.map((i) => i.message).join("; ") };
 }
 
 export function clearLog() {
@@ -42,7 +70,7 @@ export function useActivityLog(): LogEntry[] {
 }
 
 export function entryFailed(entry: LogEntry): boolean {
-  return entry.command.exitCode !== 0;
+  return entry.status === "failed";
 }
 
 export function matchesLogSearch(entry: LogEntry, search: string): boolean {
@@ -51,9 +79,8 @@ export function matchesLogSearch(entry: LogEntry, search: string): boolean {
   const haystack = [
     entry.repo,
     entry.label,
-    entry.command.args.join(" "),
-    entry.command.stdout,
-    entry.command.stderr,
+    entry.message,
+    ...entry.commands.flatMap((c) => [c.args.join(" "), c.stdout, c.stderr]),
   ]
     .join("\n")
     .toLowerCase();
@@ -64,14 +91,22 @@ export function formatLog(list: LogEntry[]): string {
   return [...list]
     .reverse()
     .map((entry) => {
-      const { args, exitCode, stdout, stderr } = entry.command;
       const lines = [
-        `[${new Date(entry.timeMs).toISOString()}] ${entry.repo} (${entry.label})`,
-        `$ git ${args.join(" ")}`,
-        `exit ${exitCode ?? "signal"}`,
+        `[${new Date(entry.timeMs).toISOString()}] ${entry.repo} — ${entry.label}: ${entry.status}`,
+        entry.message,
       ];
-      if (stdout.trim()) lines.push(stdout.trimEnd());
-      if (stderr.trim()) lines.push(stderr.trimEnd());
+      for (const { args, exitCode, stdout, stderr } of entry.commands) {
+        lines.push(`  $ git ${args.join(" ")}  (exit ${exitCode ?? "signal"})`);
+        for (const output of [stdout, stderr]) {
+          if (output.trim())
+            lines.push(
+              ...output
+                .trimEnd()
+                .split("\n")
+                .map((l) => `    ${l}`),
+            );
+        }
+      }
       return lines.join("\n");
     })
     .join("\n\n");

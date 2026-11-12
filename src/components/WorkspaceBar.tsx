@@ -40,7 +40,9 @@ export function WorkspaceBar({
           </button>
         </span>
       ))}
-      <button onClick={onRescan}>Rescan</button>
+      <button onClick={onRescan} title="Looks for repositories up to 4 levels below each directory">
+        Rescan
+      </button>
       {excludedCount > 0 && (
         <span className="muted">
           {excludedCount} removed {excludedCount === 1 ? "repository" : "repositories"} ·{" "}

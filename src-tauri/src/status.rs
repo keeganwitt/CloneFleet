@@ -94,16 +94,34 @@ pub fn detect_operation(git_dir: &Path) -> Option<InProgressOperation> {
     }
 }
 
-pub fn last_fetch_unix(git_dir: &Path) -> Option<i64> {
-    let modified = std::fs::metadata(git_dir.join("FETCH_HEAD"))
-        .ok()?
-        .modified()
-        .ok()?;
+fn modified_unix(path: &Path) -> Option<i64> {
+    let modified = std::fs::metadata(path).ok()?.modified().ok()?;
     let seconds = modified
         .duration_since(std::time::UNIX_EPOCH)
         .ok()?
         .as_secs();
     i64::try_from(seconds).ok()
+}
+
+fn newest_file_unix(dir: &Path) -> Option<i64> {
+    std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            if path.is_dir() {
+                newest_file_unix(&path)
+            } else {
+                modified_unix(&path)
+            }
+        })
+        .max()
+}
+
+pub fn last_fetch_unix(git_dir: &Path) -> Option<i64> {
+    // `git clone` writes no FETCH_HEAD, but it does write remote-tracking reflogs.
+    modified_unix(&git_dir.join("FETCH_HEAD"))
+        .or_else(|| newest_file_unix(&git_dir.join("logs/refs/remotes")))
 }
 
 pub async fn repo_status(git: &mut Git) -> Result<RepoStatus, GitError> {

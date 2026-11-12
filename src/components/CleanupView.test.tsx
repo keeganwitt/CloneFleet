@@ -137,6 +137,31 @@ describe("CleanupView", () => {
     expect(screen.getByText("Has uncommitted or untracked files")).toBeInTheDocument();
   });
 
+  it("hides repositories with nothing to clean up unless asked", async () => {
+    const user = userEvent.setup();
+    mockIPC((cmd, payload) => {
+      const path = (payload as Record<string, unknown>).path;
+      if (cmd === "analyze_branches") {
+        return path === "/empty"
+          ? {
+              ...report,
+              branches: [branch("main", { protection: "default" })],
+              worktrees: [],
+              warnings: [],
+            }
+          : report;
+      }
+      throw new Error(`unexpected ${cmd}`);
+    });
+    render(<CleanupView paths={["/repo", "/empty"]} onClose={() => {}} onChanged={() => {}} />);
+    expect(
+      await screen.findByText("1 repository has nothing to clean up in the selected categories."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("empty")).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText("Hide repositories with nothing to clean up"));
+    expect(screen.getByText("empty")).toBeInTheDocument();
+  });
+
   it("deletes merged branches without allowing unmerged ones", async () => {
     const user = userEvent.setup();
     const calls = mockBackend();

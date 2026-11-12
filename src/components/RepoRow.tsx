@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { basename, describeChanges, describeSync, parentDirectory } from "../format";
 import type { RepoState } from "../state";
-import { formatAge } from "../cleanup";
+import { formatRecent } from "../cleanup";
 import { isStale } from "../freshness";
 import { FAILURE_HINTS } from "../actionLabels";
 import { followUpOf } from "../followUps";
@@ -138,8 +138,8 @@ export function RepoRow({
                 className={`muted fetched${isStale(nowUnix, summary.lastFetchUnix) ? " stale" : ""}`}
               >
                 {summary.lastFetchUnix === null
-                  ? "no fetch recorded"
-                  : `fetched ${formatAge(nowUnix, summary.lastFetchUnix)}`}
+                  ? "never fetched"
+                  : `fetched ${formatRecent(nowUnix, summary.lastFetchUnix)}`}
               </div>
             </>
           )}

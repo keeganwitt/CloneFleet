@@ -1,4 +1,4 @@
-import { formatAge } from "../cleanup";
+import { formatRecent } from "../cleanup";
 import { basename } from "../format";
 import type { Freshness } from "../freshness";
 import { isStale } from "../freshness";
@@ -87,7 +87,8 @@ export function Dashboard(props: Props) {
           <span className={stale ? "stale" : "muted"}>
             {oldestFetchUnix === null
               ? "Never fetched"
-              : `Oldest fetch ${formatAge(props.nowUnix, oldestFetchUnix)}`}
+              : `Oldest fetch ${formatRecent(props.nowUnix, oldestFetchUnix)}`}
+            {neverFetched > 0 && oldestFetchUnix !== null && ` · ${neverFetched} never fetched`}
           </span>
           <button disabled={props.busy || props.paths.length === 0} onClick={props.onFetchAll}>
             Fetch all
@@ -96,7 +97,7 @@ export function Dashboard(props: Props) {
             {props.pendingScans > 0
               ? `Checking branches… ${props.pendingScans} left`
               : props.lastScannedUnix !== undefined
-                ? `Checked ${formatAge(props.nowUnix, props.lastScannedUnix)}`
+                ? `Checked ${formatRecent(props.nowUnix, props.lastScannedUnix)}`
                 : ""}
           </span>
           <button className="link" disabled={props.pendingScans > 0} onClick={props.onRescan}>

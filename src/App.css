@@ -764,3 +764,12 @@ input.days {
 .open-buttons {
   margin-bottom: 6px;
 }
+
+h3 .repo-path {
+  font-weight: normal;
+}
+
+.modal {
+  max-height: 90vh;
+  overflow: auto;
+}

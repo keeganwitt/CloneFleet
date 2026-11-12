@@ -409,8 +409,18 @@ mod tests {
     #[tokio::test]
     async fn summarize_reports_when_the_repository_was_last_fetched() {
         let fixture = Fixture::new();
-        let before = summarize(&mut Git::new(&fixture.work)).await.unwrap();
-        assert_eq!(before.status.last_fetch_unix, None);
+        let cloned = summarize(&mut Git::new(&fixture.work)).await.unwrap();
+        assert!(
+            cloned.status.last_fetch_unix.is_some(),
+            "a fresh clone counts as fetched"
+        );
+        let local = fixture.root().join("local-only");
+        fixture.git(
+            fixture.root(),
+            &["init", "--quiet", local.to_str().unwrap()],
+        );
+        let never = summarize(&mut Git::new(&local)).await.unwrap();
+        assert_eq!(never.status.last_fetch_unix, None);
 
         fixture.git(&fixture.work, &["fetch", "--quiet"]);
         let now = std::time::SystemTime::now()
