@@ -5,6 +5,8 @@ import {
   findAndReplace,
   httpsToSsh,
   planUrlChanges,
+  remoteProtocol,
+  type RemoteProtocol,
   sshToHttps,
   type RemoteRow,
   type UrlChange,
@@ -34,7 +36,6 @@ type Mode = "replace" | "toSsh" | "toHttps";
 
 interface Props {
   paths: string[];
-  onClose: () => void;
   runJobs: (jobs: [string, Action][]) => Promise<void>;
 }
 
@@ -49,7 +50,7 @@ async function loadRemotes(paths: string[]): Promise<Record<string, RemoteInfo[]
   return Object.fromEntries(entries);
 }
 
-export function RemotesView({ paths, onClose, runJobs }: Props) {
+export function RemotesView({ paths, runJobs }: Props) {
   const [remotes, setRemotes] = useState<Record<string, RemoteInfo[]>>();
   const [checks, setChecks] = useState<Record<string, RemoteCheck[] | string>>({});
   const [checking, setChecking] = useState(0);
@@ -58,6 +59,9 @@ export function RemotesView({ paths, onClose, runJobs }: Props) {
   const [replace, setReplace] = useState("");
   const [notice, setNotice] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [nameFilter, setNameFilter] = useState("");
+  const [protocolFilter, setProtocolFilter] = useState<RemoteProtocol | "">("");
+  const [problemsOnly, setProblemsOnly] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -67,7 +71,7 @@ export function RemotesView({ paths, onClose, runJobs }: Props) {
     };
   }, [paths]);
 
-  const rows: RemoteRow[] = remotes
+  const allRows: RemoteRow[] = remotes
     ? paths.flatMap((repo) =>
         (remotes[repo] ?? []).map((r) => ({ repo, remote: r.name, url: r.fetchUrl })),
       )
@@ -76,6 +80,19 @@ export function RemotesView({ paths, onClose, runJobs }: Props) {
     const result = checks[row.repo];
     return typeof result === "string" ? undefined : result?.find((c) => c.name === row.remote);
   };
+  const remoteNames = [...new Set(allRows.map((row) => row.remote))].sort();
+  const anyChecked = Object.keys(checks).length > 0;
+  const rows = allRows.filter((row) => {
+    if (nameFilter && row.remote !== nameFilter) return false;
+    if (protocolFilter && remoteProtocol(row.url) !== protocolFilter) return false;
+    if (problemsOnly) {
+      const check = checkFor(row);
+      const failed = typeof checks[row.repo] === "string";
+      if (!failed && (!check || check.status === "ok")) return false;
+    }
+    return true;
+  });
+  const filtering = nameFilter !== "" || protocolFilter !== "" || problemsOnly;
   const redirects: UrlChange[] = rows.flatMap((row) => {
     const check = checkFor(row);
     return check?.status === "redirected" && check.redirectUrl
@@ -135,7 +152,6 @@ export function RemotesView({ paths, onClose, runJobs }: Props) {
   return (
     <div className="cleanup">
       <div className="toolbar">
-        <button onClick={onClose}>← Back</button>
         <h2>Remotes</h2>
         <button disabled={checking > 0 || !remotes} onClick={checkAll}>
           {checking > 0 ? `Checking… ${checking} left` : "Check all remotes"}
@@ -156,8 +172,58 @@ export function RemotesView({ paths, onClose, runJobs }: Props) {
         redirected to a new URL, which usually follows a repository or organization rename.
       </p>
 
+      <div className="toolbar" role="group" aria-label="Remote filters">
+        <select
+          aria-label="Filter by remote name"
+          value={nameFilter}
+          onChange={(event) => setNameFilter(event.target.value)}
+        >
+          <option value="">All remotes</option>
+          {remoteNames.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Filter by protocol"
+          value={protocolFilter}
+          onChange={(event) => setProtocolFilter(event.target.value as RemoteProtocol | "")}
+        >
+          <option value="">Any protocol</option>
+          <option value="ssh">SSH</option>
+          <option value="https">HTTPS</option>
+          <option value="other">Other (local paths and more)</option>
+        </select>
+        {anyChecked && (
+          <label>
+            <input
+              type="checkbox"
+              checked={problemsOnly}
+              onChange={(event) => setProblemsOnly(event.target.checked)}
+            />
+            Problems only
+          </label>
+        )}
+        <span className="muted">
+          {filtering ? `${rows.length} of ${allRows.length} remotes` : `${allRows.length} remotes`}
+        </span>
+        {filtering && (
+          <button
+            className="link"
+            onClick={() => {
+              setNameFilter("");
+              setProtocolFilter("");
+              setProblemsOnly(false);
+            }}
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
       <fieldset className="url-editor">
-        <legend>Change URLs in bulk</legend>
+        <legend>Change URLs in bulk{filtering ? " (shown remotes only)" : ""}</legend>
         <div className="toolbar" role="radiogroup" aria-label="Change type">
           {(
             [
@@ -288,7 +354,11 @@ export function RemotesView({ paths, onClose, runJobs }: Props) {
           </tbody>
         </table>
       )}
-      {remotes && rows.length === 0 && <p className="muted">No remotes configured.</p>}
+      {remotes && rows.length === 0 && (
+        <p className="muted">
+          {allRows.length === 0 ? "No remotes configured." : "No remotes match the filters."}
+        </p>
+      )}
     </div>
   );
 }

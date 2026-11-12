@@ -19,7 +19,6 @@ type RepoCleanup =
 
 interface Props {
   paths: string[];
-  onClose: () => void;
   onChanged: (paths: string[]) => void;
   onOpenBranch?: (repo: string, branch: string) => void;
 }
@@ -60,7 +59,7 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function CleanupView({ paths, onClose, onChanged, onOpenBranch }: Props) {
+export function CleanupView({ paths, onChanged, onOpenBranch }: Props) {
   const [fetchFirst, setFetchFirst] = useState(true);
   const [staleDays, setStaleDays] = useState(90);
   const staleDaysRef = useRef(staleDays);
@@ -238,7 +237,6 @@ export function CleanupView({ paths, onClose, onChanged, onOpenBranch }: Props) 
   return (
     <div className="cleanup">
       <div className="toolbar">
-        <button onClick={onClose}>← Back</button>
         <h2>Branch &amp; worktree cleanup</h2>
         <label>
           <input

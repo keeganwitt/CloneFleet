@@ -1,4 +1,4 @@
-import { basename } from "../format";
+import { uniqueLabels } from "../format";
 import {
   CHANGES_OPTIONS,
   SYNC_OPTIONS,
@@ -16,6 +16,7 @@ interface Props {
 }
 
 export function FilterBar({ filters, directories, onChange }: Props) {
+  const labels = uniqueLabels(directories);
   return (
     <div className="toolbar">
       {directories.length > 1 && (
@@ -27,7 +28,7 @@ export function FilterBar({ filters, directories, onChange }: Props) {
           <option value="">All directories</option>
           {directories.map((directory) => (
             <option key={directory} value={directory}>
-              {basename(directory)}
+              {labels.get(directory)}
             </option>
           ))}
         </select>

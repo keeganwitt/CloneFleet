@@ -465,8 +465,17 @@ describe("App", () => {
     expect(calls.filter((c) => c.cmd === "analyze_unpushed")).toEqual([
       { cmd: "analyze_unpushed", args: { path: "/src/beta", fetch: true } },
     ]);
-    await user.click(screen.getByRole("button", { name: "← Back" }));
-    expect(screen.getByRole("region", { name: "Overview" })).toBeInTheDocument();
+    expect(screen.getByText("Showing 1 of 2 repositories")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Directories" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show all repositories" }));
+    await waitFor(() =>
+      expect(calls.filter((c) => c.cmd === "analyze_unpushed").map((c) => c.args.path)).toEqual([
+        "/src/beta",
+        "/src/alpha",
+        "/src/beta",
+      ]),
+    );
+    expect(screen.queryByText(/Showing \d+ of/)).not.toBeInTheDocument();
   });
 
   it("opens a directory in place of the current one and can switch back via recent", async () => {
@@ -506,6 +515,19 @@ describe("App", () => {
     await waitFor(() => expect(screen.queryByText("one")).not.toBeInTheDocument());
     expect(screen.getByText("three")).toBeInTheDocument();
     expect(calls.find((c) => c.cmd === "remove_directory")?.args).toEqual({ path: "/a" });
+  });
+
+  it("tells apart open directories that share a name", async () => {
+    mockBackend({
+      repos: ["/home/projects/build-scripts/one", "/home/forks/build-scripts/two"],
+      roots: ["/home/projects/build-scripts", "/home/forks/build-scripts"],
+    });
+    await renderRepositories();
+    const directories = await screen.findByRole("group", { name: "Directories" });
+    expect(directories).toHaveTextContent("projects/build-scripts");
+    expect(directories).toHaveTextContent("forks/build-scripts");
+    expect(screen.getByRole("option", { name: "projects/build-scripts" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "forks/build-scripts" })).toBeInTheDocument();
   });
 
   it("filters by directory when more than one is open", async () => {

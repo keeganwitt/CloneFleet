@@ -4,6 +4,29 @@ export function basename(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
 
+export function uniqueLabels(paths: string[]): Map<string, string> {
+  const unique = [...new Set(paths)];
+  const segments = new Map(unique.map((p) => [p, p.split(/[\\/]/).filter(Boolean)]));
+  const depth = new Map(unique.map((p) => [p, 1]));
+  const label = (p: string) => segments.get(p)!.slice(-depth.get(p)!).join("/") || p;
+  for (;;) {
+    const byLabel = new Map<string, string[]>();
+    for (const p of unique) byLabel.set(label(p), [...(byLabel.get(label(p)) ?? []), p]);
+    let grew = false;
+    for (const group of byLabel.values()) {
+      if (group.length < 2) continue;
+      for (const p of group) {
+        if (depth.get(p)! < segments.get(p)!.length) {
+          depth.set(p, depth.get(p)! + 1);
+          grew = true;
+        }
+      }
+    }
+    if (!grew) break;
+  }
+  return new Map(unique.map((p) => [p, label(p)]));
+}
+
 export function parentDirectory(path: string): string {
   const trimmed = path.replace(/[\\/]+$/, "");
   const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));

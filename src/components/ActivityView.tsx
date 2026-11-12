@@ -5,7 +5,7 @@ import { basename } from "../format";
 
 const MAX_SHOWN = 500;
 
-export function ActivityView({ onClose }: { onClose: () => void }) {
+export function ActivityView() {
   const entries = useActivityLog();
   const [search, setSearch] = useState("");
   const [failuresOnly, setFailuresOnly] = useState(false);
@@ -27,7 +27,6 @@ export function ActivityView({ onClose }: { onClose: () => void }) {
   return (
     <div className="cleanup">
       <div className="toolbar">
-        <button onClick={onClose}>← Back</button>
         <h2>Activity</h2>
         <button disabled={shown.length === 0} onClick={saveLog}>
           Save log…

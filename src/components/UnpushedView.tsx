@@ -12,7 +12,6 @@ type RepoUnpushed =
 
 interface Props {
   paths: string[];
-  onClose: () => void;
   onChanged: (paths: string[]) => void;
 }
 
@@ -84,7 +83,7 @@ export function describeUnpushedBranch(branch: UnpushedBranch): string {
   return `${commits} (${where})${merged}`;
 }
 
-export function UnpushedView({ paths, onClose, onChanged }: Props) {
+export function UnpushedView({ paths, onChanged }: Props) {
   const [fetchFirst, setFetchFirst] = useState(true);
   const [hideClean, setHideClean] = useState(true);
   const [ageFilter, setAgeFilter] = useState(false);
@@ -180,7 +179,6 @@ export function UnpushedView({ paths, onClose, onChanged }: Props) {
   return (
     <div className="cleanup">
       <div className="toolbar">
-        <button onClick={onClose}>← Back</button>
         <h2>Unpushed work &amp; stashes</h2>
         <label>
           <input

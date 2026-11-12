@@ -1,5 +1,5 @@
 import { formatRecent } from "../cleanup";
-import { basename } from "../format";
+import { basename, uniqueLabels } from "../format";
 import type { Freshness } from "../freshness";
 import { isStale } from "../freshness";
 import { PROBLEMS, SECTIONS, buildOverview, type Card, type Fix } from "../problems";
@@ -30,8 +30,8 @@ interface Props {
   onRescan: () => void;
 }
 
-function RepoNames({ paths }: { paths: string[] }) {
-  const shown = paths.slice(0, PREVIEW_COUNT).map(basename);
+function RepoNames({ paths, labels }: { paths: string[]; labels: Map<string, string> }) {
+  const shown = paths.slice(0, PREVIEW_COUNT).map((path) => labels.get(path) ?? basename(path));
   const more = paths.length - shown.length;
   return (
     <span className="muted card-repos">
@@ -44,16 +44,17 @@ function RepoNames({ paths }: { paths: string[] }) {
 function ProblemCard({
   card,
   busy,
+  labels,
   onFix,
   onShow,
-}: { card: Card; busy: boolean } & Pick<Props, "onFix" | "onShow">) {
+}: { card: Card; busy: boolean; labels: Map<string, string> } & Pick<Props, "onFix" | "onShow">) {
   const info = PROBLEMS[card.kind];
   const title = info.title(card.paths.length, card.items);
   return (
     <li className={`card card-${info.severity}`} aria-label={title}>
       <div className="card-text">
         <strong>{title}</strong>
-        <RepoNames paths={card.paths} />
+        <RepoNames paths={card.paths} labels={labels} />
       </div>
       <div className="card-actions">
         {info.fix && (
@@ -71,6 +72,7 @@ function ProblemCard({
 
 export function Dashboard(props: Props) {
   const overview = buildOverview(props.paths, props.states, props.healths);
+  const labels = uniqueLabels(props.paths);
   const { oldestFetchUnix, neverFetched } = props.freshness;
   const stale = isStale(props.nowUnix, oldestFetchUnix) || neverFetched > 0;
 
@@ -117,6 +119,7 @@ export function Dashboard(props: Props) {
                 <ProblemCard
                   key={card.kind}
                   card={card}
+                  labels={labels}
                   busy={props.busy}
                   onFix={props.onFix}
                   onShow={props.onShow}
@@ -140,7 +143,7 @@ export function Dashboard(props: Props) {
                   {overview.healthy.length === 1 ? "repository is" : "repositories are"} up to date
                   and clean
                 </strong>
-                <RepoNames paths={overview.healthy} />
+                <RepoNames paths={overview.healthy} labels={labels} />
               </div>
               <div className="card-actions">
                 <button

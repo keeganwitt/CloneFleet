@@ -103,3 +103,13 @@ export function parseWebHosts(text: string): { host: string; webUrl: string }[] 
 export function formatWebHosts(hosts: { host: string; webUrl: string }[]): string {
   return hosts.map((h) => `${h.host} = ${h.webUrl}`).join("\n");
 }
+
+export type RemoteProtocol = "ssh" | "https" | "other";
+
+export function remoteProtocol(url: string): RemoteProtocol {
+  const parsed = parseRemoteUrl(url);
+  if (!parsed) return "other";
+  if (parsed.protocol === "ssh") return "ssh";
+  if (parsed.protocol === "https" || parsed.protocol === "http") return "https";
+  return "other";
+}

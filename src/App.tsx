@@ -16,7 +16,7 @@ import { UnpushedView } from "./components/UnpushedView";
 import { WorkspaceBar } from "./components/WorkspaceBar";
 import { defaultFilters, matchesFilters, type Filters } from "./filters";
 import { pendingFollowUps } from "./followUps";
-import { basename } from "./format";
+import { uniqueLabels } from "./format";
 import { fleetFreshness, isStale } from "./freshness";
 import type { Fix } from "./problems";
 import { describePushes } from "./push";
@@ -147,6 +147,24 @@ function App() {
   };
 
   const listPage = page.kind === "overview" || page.kind === "repos";
+  const recentLabels = uniqueLabels([
+    ...manager.workspace.roots.map((root) => root.path),
+    ...manager.workspace.recent.flat(),
+  ]);
+  const navButton = ([target, label]: [Page, string]) => (
+    <button
+      key={label}
+      aria-current={page.kind === target.kind ? "page" : undefined}
+      onClick={() => navigate(target)}
+    >
+      {label}
+    </button>
+  );
+  const scoped =
+    (page.kind === "cleanup" || page.kind === "unpushed" || page.kind === "remotes") &&
+    page.paths.length < state.order.length
+      ? page
+      : undefined;
   const navItems: [Page, string][] = [
     [{ kind: "overview" }, "Overview"],
     [{ kind: "repos" }, "Repositories"],
@@ -181,7 +199,7 @@ function App() {
             <option value="">Recent…</option>
             {manager.workspace.recent.map((roots, index) => (
               <option key={roots.join("\n")} value={index}>
-                {roots.map(basename).join(" + ")}
+                {roots.map((root) => recentLabels.get(root)).join(" + ")}
               </option>
             ))}
             <option value="clear">Clear recent</option>
@@ -205,7 +223,7 @@ function App() {
         </div>
       )}
 
-      {listPage && (
+      {
         <WorkspaceBar
           roots={manager.workspace.roots}
           excludedCount={manager.workspace.excludedCount}
@@ -216,7 +234,7 @@ function App() {
           onRescan={manager.rescan}
           onRestoreExcluded={manager.restoreExcluded}
         />
-      )}
+      }
 
       {manager.notice && (
         <div className="notice" role="status">
@@ -236,15 +254,15 @@ function App() {
       ) : (
         <div className="layout">
           <nav className="sidebar" aria-label="Sections">
-            {navItems.map(([target, label]) => (
-              <button
-                key={label}
-                aria-current={page.kind === target.kind ? "page" : undefined}
-                onClick={() => navigate(target)}
-              >
-                {label}
-              </button>
-            ))}
+            {navItems.slice(0, 2).map(navButton)}
+
+            <div className="sidebar-heading">Tools</div>
+
+            {navItems.slice(2, 5).map(navButton)}
+
+            <hr className="sidebar-divider" />
+
+            {navItems.slice(5).map(navButton)}
           </nav>
 
           <div className="content">
@@ -314,36 +332,40 @@ function App() {
               />
             )}
 
+            {scoped && (
+              <div className="toolbar">
+                <span className="chip path-filter">
+                  Showing {scoped.paths.length} of {state.order.length} repositories
+                  <button
+                    className="chip-remove"
+
+                    aria-label="Show all repositories"
+
+                    onClick={() => setPage({ ...scoped, paths: state.order })}
+                  >
+                    ×
+                  </button>
+                </span>
+              </div>
+            )}
+
             {page.kind === "cleanup" && (
               <CleanupView
                 key={page.paths.join("\n")}
                 paths={page.paths}
-                onClose={() => setPage({ kind: "overview" })}
                 onChanged={changed}
                 onOpenBranch={(path, branch) => setDetail({ path, tab: "branches", branch })}
               />
             )}
 
             {page.kind === "unpushed" && (
-              <UnpushedView
-                key={page.paths.join("\n")}
-                paths={page.paths}
-                onClose={() => setPage({ kind: "overview" })}
-                onChanged={changed}
-              />
+              <UnpushedView key={page.paths.join("\n")} paths={page.paths} onChanged={changed} />
             )}
 
-            {page.kind === "activity" && (
-              <ActivityView onClose={() => setPage({ kind: "overview" })} />
-            )}
+            {page.kind === "activity" && <ActivityView />}
 
             {page.kind === "remotes" && (
-              <RemotesView
-                key={page.paths.join("\n")}
-                paths={page.paths}
-                onClose={() => setPage({ kind: "overview" })}
-                runJobs={runJobs}
-              />
+              <RemotesView key={page.paths.join("\n")} paths={page.paths} runJobs={runJobs} />
             )}
 
             {page.kind === "repos" && (

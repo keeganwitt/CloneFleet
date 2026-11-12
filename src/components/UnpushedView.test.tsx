@@ -101,7 +101,7 @@ function mockBackend(confirmed = true) {
 
 function renderView() {
   const onChanged = vi.fn();
-  render(<UnpushedView paths={["/busy", "/clean"]} onClose={() => {}} onChanged={onChanged} />);
+  render(<UnpushedView paths={["/busy", "/clean"]} onChanged={onChanged} />);
   return onChanged;
 }
 

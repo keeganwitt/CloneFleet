@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  remoteProtocol,
   findAndReplace,
   formatWebHosts,
   parseWebHosts,
@@ -96,5 +97,16 @@ describe("webUrl", () => {
     expect(formatWebHosts(hosts)).toBe(
       "gitlab-work = https://gitlab.example.com/\nssh.git.example.com = https://example.com/gitlab",
     );
+  });
+});
+
+describe("remoteProtocol", () => {
+  it("groups URLs by how they connect", () => {
+    expect(remoteProtocol("git@github.com:org/repo.git")).toBe("ssh");
+    expect(remoteProtocol("ssh://git@host:2222/a/b.git")).toBe("ssh");
+    expect(remoteProtocol("https://github.com/org/repo.git")).toBe("https");
+    expect(remoteProtocol("http://intranet/repo.git")).toBe("https");
+    expect(remoteProtocol("/srv/git/repo.git")).toBe("other");
+    expect(remoteProtocol("git://host/repo.git")).toBe("other");
   });
 });

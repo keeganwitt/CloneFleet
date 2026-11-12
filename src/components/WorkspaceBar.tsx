@@ -1,4 +1,4 @@
-import { basename } from "../format";
+import { uniqueLabels } from "../format";
 import type { RootView } from "../types";
 
 interface Props {
@@ -17,6 +17,7 @@ export function WorkspaceBar({
   onRestoreExcluded,
 }: Props) {
   if (roots.length === 0) return null;
+  const labels = uniqueLabels(roots.map((root) => root.path));
   return (
     <div className="toolbar workspace-bar" role="group" aria-label="Directories">
       {roots.map((root) => (
@@ -25,7 +26,7 @@ export function WorkspaceBar({
           className={`chip${root.missing ? " chip-missing" : ""}`}
           title={root.path}
         >
-          {basename(root.path)}
+          {labels.get(root.path)}
           <span className="muted">
             {root.missing
               ? "missing"

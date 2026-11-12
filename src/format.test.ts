@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { basename, describeChanges, describeSync, parentDirectory } from "./format";
+import { basename, describeChanges, describeSync, parentDirectory, uniqueLabels } from "./format";
 import type { RepoSummary } from "./types";
 
 const clean: RepoSummary = {
@@ -22,6 +22,42 @@ describe("basename", () => {
   it("handles POSIX and Windows paths", () => {
     expect(basename("/home/me/repo/")).toBe("repo");
     expect(basename("C:\\src\\repo")).toBe("repo");
+  });
+});
+
+describe("uniqueLabels", () => {
+  const labels = (paths: string[]) => Object.fromEntries(uniqueLabels(paths));
+
+  it("uses the folder name when it is unique", () => {
+    expect(labels(["/home/me/projects", "/home/me/forks"])).toEqual({
+      "/home/me/projects": "projects",
+      "/home/me/forks": "forks",
+    });
+  });
+
+  it("adds parent folders only until colliding names differ", () => {
+    expect(
+      labels(["/home/me/projects/build-scripts", "/home/me/forks/build-scripts", "/home/me/tools"]),
+    ).toEqual({
+      "/home/me/projects/build-scripts": "projects/build-scripts",
+      "/home/me/forks/build-scripts": "forks/build-scripts",
+      "/home/me/tools": "tools",
+    });
+  });
+
+  it("goes up as many levels as needed", () => {
+    expect(labels(["/a/x/y/build-scripts", "/b/x/y/build-scripts"])).toEqual({
+      "/a/x/y/build-scripts": "a/x/y/build-scripts",
+      "/b/x/y/build-scripts": "b/x/y/build-scripts",
+    });
+  });
+
+  it("handles one path ending another, Windows paths, and duplicates", () => {
+    expect(labels(["/x/a/b", "/a/b", "/a/b"])).toEqual({ "/x/a/b": "x/a/b", "/a/b": "a/b" });
+    expect(labels(["C:\\work\\api", "D:\\forks\\api"])).toEqual({
+      "C:\\work\\api": "work/api",
+      "D:\\forks\\api": "forks/api",
+    });
   });
 });
 

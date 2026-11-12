@@ -32,7 +32,7 @@ describe("ActivityView", () => {
   it("lists one entry per action, filters to failures, and searches commands", async () => {
     const user = userEvent.setup();
     seed();
-    render(<ActivityView onClose={() => {}} />);
+    render(<ActivityView />);
     expect(entries()).toHaveLength(2);
     expect(screen.getByText("main has diverged")).toHaveClass("outcome-failed");
     expect(screen.getByText("git pull --ff-only")).toBeInTheDocument();
@@ -48,7 +48,7 @@ describe("ActivityView", () => {
 
   it("updates live and clears", async () => {
     const user = userEvent.setup();
-    render(<ActivityView onClose={() => {}} />);
+    render(<ActivityView />);
     expect(screen.getByText("Nothing has run yet.")).toBeInTheDocument();
     act(() => seed());
     expect(screen.getByText("Fetched origin")).toBeInTheDocument();
@@ -66,7 +66,7 @@ describe("ActivityView", () => {
       throw new Error(`unexpected ${cmd}`);
     });
     seed();
-    render(<ActivityView onClose={() => {}} />);
+    render(<ActivityView />);
     await user.click(screen.getByRole("button", { name: "Save log…" }));
 
     expect(await screen.findByText("Saved 2 entries")).toBeInTheDocument();

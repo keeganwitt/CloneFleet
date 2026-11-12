@@ -118,7 +118,7 @@ const called = (calls: ReturnType<typeof mockBackend>, cmd: string) =>
 
 function renderView() {
   const onChanged = vi.fn();
-  render(<CleanupView paths={["/repo"]} onClose={() => {}} onChanged={onChanged} />);
+  render(<CleanupView paths={["/repo"]} onChanged={onChanged} />);
   return onChanged;
 }
 
@@ -158,7 +158,7 @@ describe("CleanupView", () => {
       }
       throw new Error(`unexpected ${cmd}`);
     });
-    render(<CleanupView paths={["/repo", "/empty"]} onClose={() => {}} onChanged={() => {}} />);
+    render(<CleanupView paths={["/repo", "/empty"]} onChanged={() => {}} />);
     expect(
       await screen.findByText("1 repository has nothing to clean up in the selected categories."),
     ).toBeInTheDocument();
@@ -367,7 +367,7 @@ describe("CleanupView branch tree", () => {
     render(
       <CleanupView
         paths={["/repo"]}
-        onClose={() => {}}
+
         onChanged={() => {}}
         onOpenBranch={onOpenBranch}
       />,

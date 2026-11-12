@@ -51,7 +51,7 @@ function mockRemotes({ confirmed = true } = {}) {
 
 function renderView() {
   const runJobs = vi.fn().mockResolvedValue(undefined);
-  render(<RemotesView paths={["/src/api", "/src/web"]} onClose={() => {}} runJobs={runJobs} />);
+  render(<RemotesView paths={["/src/api", "/src/web"]} runJobs={runJobs} />);
   return runJobs;
 }
 
@@ -110,6 +110,43 @@ describe("RemotesView", () => {
         ],
       ]),
     );
+  });
+
+  it("filters by remote name, protocol, and problems, and limits bulk changes to shown remotes", async () => {
+    const user = userEvent.setup();
+    mockRemotes();
+    const runJobs = renderView();
+    await screen.findByText("git@github.com:me/web.git");
+
+    await user.selectOptions(screen.getByLabelText("Filter by remote name"), "upstream");
+    expect(screen.queryByText("git@github.com:me/web.git")).not.toBeInTheDocument();
+    expect(screen.getByText("1 of 3 remotes")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Find"), "old-org");
+    await user.type(screen.getByLabelText("Replace with"), "new-org");
+    expect(
+      within(screen.getByRole("list", { name: "Planned URL changes" })).getAllByRole("listitem"),
+    ).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "Apply 1 change" }));
+    await waitFor(() =>
+      expect(runJobs).toHaveBeenCalledWith([
+        [
+          "/src/web",
+          { type: "setRemoteUrl", remote: "upstream", url: "https://github.com/new-org/web.git" },
+        ],
+      ]),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Clear filters" }));
+    await user.selectOptions(screen.getByLabelText("Filter by protocol"), "ssh");
+    expect(screen.getByText("git@github.com:me/web.git")).toBeInTheDocument();
+    expect(screen.getByText("1 of 3 remotes")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Filter by protocol"), "");
+
+    expect(screen.queryByLabelText("Problems only")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Check all remotes" }));
+    await user.click(await screen.findByLabelText("Problems only"));
+    expect(screen.getByText("2 of 3 remotes")).toBeInTheDocument();
+    expect(screen.queryByText("OK")).not.toBeInTheDocument();
   });
 
   it("converts HTTPS remotes to SSH and respects a cancelled confirmation", async () => {
