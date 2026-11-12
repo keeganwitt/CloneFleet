@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254" role="img" aria-labelledby="title desc">
+  <title id="title">CloneFleet</title>
+  <desc id="desc">Three white ships with gold Git branch symbols sailing over cyan waves on a navy background.</desc>
+  <defs>
+    <g id="branch" fill="#001427" stroke="#ffcf48" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M704 611V658L737 641" fill="none"/>
+      <circle cx="704" cy="601" r="9"/>
+      <circle cx="704" cy="668" r="9"/>
+      <circle cx="744" cy="636" r="9"/>
+    </g>
+    <g id="ship">
+      <g fill="#fff">
+        <path d="M614 412V351Q614 346 620 346H637Q644 346 644 351V412L699 430L703 459L691 456L687 445L628 429L568 445L564 456L553 459L556 430Z"/>
+        <path d="M508 482L627 452L744 482L764 533L627 488L488 533Z"/>
+        <path d="M418 590L627 514L829 590Q834 592 831 598L745 747L789 609L627 545L462 616L503 747L416 598Q413 593 418 590Z"/>
+      </g>
+      <use href="#branch"/>
+    </g>
+    <g id="side-ship">
+      <g fill="#fff">
+        <path d="M280 594V548Q280 543 285 543H295Q300 543 300 548V594L351 610L364 637L290 612L215 637L228 610Z"/>
+        <path d="M172 673L290 632L409 673Q415 675 411 681L362 778L387 692L290 653L197 693L222 778L169 681Q166 676 172 673Z"/>
+      </g>
+      <use href="#branch" transform="translate(-85 338) scale(.585)"/>
+    </g>
+  </defs>
+  <path fill="#001427" d="M0 0H1254V1254H0Z"/>
+  <use href="#ship"/>
+  <use href="#side-ship"/>
+  <use href="#side-ship" transform="translate(673)"/>
+  <g fill="#00cfea">
+    <path d="M113 824C194 788 245 784 303 817C421 733 520 747 628 846C735 738 841 738 953 817C1018 781 1074 794 1142 824C1070 811 1016 814 965 835C828 773 748 788 628 871C509 779 420 783 291 835C238 811 185 813 113 824Z"/>
+    <path d="M270 878C411 803 530 819 628 914C725 819 848 802 982 878C839 836 746 853 628 914C505 852 408 835 270 878Z"/>
+  </g>
+</svg>

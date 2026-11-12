@@ -1,6 +1,8 @@
 # CloneFleet
 
-A cross-platform desktop app for running routine git maintenance across many repositories at once.
+<img src="assets/clonefleet.svg" alt="CloneFleet: three ships with Git branch symbols sailing over cyan waves" width="320" />
+
+Your fleet of Git clones, under one command. A cross-platform desktop app to keep your repositories in sync, clean up branches and worktrees, and tackle routine maintenance across your fleet at once.
 
 ## Features
 
@@ -55,6 +57,16 @@ pnpm tauri dev
 Rust tests create temporary repositories with local bare remotes, so they need `git` but no network access. Tauri requires the `dist` directory to exist at compile time, so run `pnpm build` once before running Rust tests or clippy on a fresh clone.
 
 CI runs on GitHub Actions (`.github/workflows/ci.yml`): frontend lint, format, tests, and build on Linux, and Rust clippy and tests on Linux, macOS, and Windows.
+
+### App icon
+
+[`assets/clonefleet.svg`](assets/clonefleet.svg) is the authoritative source for the logo and app icon. Edit this vector artwork, then regenerate the platform icons in `src-tauri/icons`:
+
+```sh
+pnpm icons
+```
+
+Commit the SVG and regenerated icons together.
 
 ## License
 
