@@ -2,6 +2,8 @@ import type { RepoState } from "./state";
 import type { RepoHealth } from "./types";
 
 export type ProblemKind =
+  | "authRequired"
+  | "remoteUnreachable"
   | "statusError"
   | "inProgress"
   | "conflicts"
@@ -30,6 +32,16 @@ const repos = (n: number) => `${n} ${n === 1 ? "repository" : "repositories"}`;
 const branches = (n: number) => `${n} ${n === 1 ? "branch" : "branches"}`;
 
 export const PROBLEMS: Record<ProblemKind, ProblemInfo> = {
+  authRequired: {
+    section: "attention",
+    severity: "danger",
+    title: (n) => `${repos(n)} need authentication`,
+  },
+  remoteUnreachable: {
+    section: "attention",
+    severity: "warning",
+    title: (n) => `${repos(n)} couldn't reach their remote`,
+  },
   statusError: {
     section: "attention",
     severity: "danger",
@@ -111,6 +123,12 @@ const ORDER = Object.keys(PROBLEMS) as ProblemKind[];
 
 export function repoProblems(repo: RepoState, health?: RepoHealth): [ProblemKind, number][] {
   const found: [ProblemKind, number][] = [];
+  const outcome = repo.runningAction === undefined ? repo.result?.outcome : undefined;
+  if (outcome?.status === "failed" && outcome.reason) {
+    const auth =
+      outcome.reason === "authenticationRequired" || outcome.reason === "hostKeyUnverified";
+    found.push([auth ? "authRequired" : "remoteUnreachable", 1]);
+  }
   if (repo.summaryError) found.push(["statusError", 1]);
   const summary = repo.summary;
   if (summary) {

@@ -12,6 +12,10 @@ Your fleet of Git clones, under one command. A cross-platform desktop app to kee
 - **Checkout the default branch.** Repositories with uncommitted changes to tracked files are skipped and reported, with per-repository options to stash (never unstashed automatically) or commit those changes.
 - **Repository details panel** with tabs for **Changes** (changed files with per-file diffs), **Branches** (each branch's commits not on the base and its diff since it branched), and **Main branches** (per-repository primary branch plus extra protected main branches such as `dev` or `2.x`, which also count as merge targets).
 - **Bulk run summary** after every bulk action, with counts per outcome that filter the table, and a fetch-freshness indicator per repository.
+- **Remotes page**: check every remote on demand, update remotes that moved (HTTP redirects after renames), and change URLs in bulk with find and replace or HTTPS/SSH conversion, previewed before applying.
+- **Activity log** of every git command run to change a repository, searchable, filterable to failures, and exportable.
+- **Clear failure reasons**: authentication, unknown host keys, missing remotes, and network errors are recognized and explained; network commands time out after two minutes, and queued repositories in a bulk run can be cancelled.
+- **Sortable repository list** by name, branch, changes, sync state, or last result.
 - **Settings** for reopening the last directories at launch, remembering recent directories, the git executable (detected automatically, including Homebrew locations that macOS GUI apps don't see on `PATH`, or chosen explicitly) and the theme (system, light, or dark).
 - **Fetch** every remote with `--prune` without touching working trees.
 - **Pull** with `--ff-only`, regardless of `pull.rebase` or autostash settings.

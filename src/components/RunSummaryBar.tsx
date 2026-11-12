@@ -12,18 +12,39 @@ interface Props {
   activeStatus: RunStatus | undefined;
   onShowStatus: (status: RunStatus | undefined) => void;
   onDismiss: () => void;
+  cancelled?: boolean;
+  onCancel?: () => void;
 }
 
-export function RunSummaryBar({ label, summary, activeStatus, onShowStatus, onDismiss }: Props) {
+export function RunSummaryBar({
+  label,
+  summary,
+  activeStatus,
+  onShowStatus,
+  onDismiss,
+  cancelled,
+  onCancel,
+}: Props) {
   const statuses = (Object.keys(STATUS_LABELS) as RunStatus[]).filter(
     (status) => summary.byStatus[status].length > 0,
   );
-  const reasons = summary.skipReasons.map(([reason, count]) => `${count} ${reason}`).join(", ");
+  const reasons = summary.reasons.map(([reason, count]) => `${count} ${reason}`).join(", ");
   return (
     <div className="notice run-summary" role="status" aria-label="Last run">
       <span className="run-summary-items">
         <strong>{label}</strong>
-        {summary.running > 0 && <span className="muted">{summary.running} running…</span>}
+        {summary.running > 0 && (
+          <>
+            <span className="muted">
+              {summary.running} {cancelled ? "finishing…" : "running…"}
+            </span>
+            {onCancel && !cancelled && (
+              <button className="link" onClick={onCancel}>
+                Cancel
+              </button>
+            )}
+          </>
+        )}
         {statuses.map((status) => (
           <button
             key={status}

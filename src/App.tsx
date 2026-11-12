@@ -2,10 +2,12 @@ import { useState } from "react";
 import { api } from "./api";
 import { formatAge } from "./cleanup";
 import { ActionBar } from "./components/ActionBar";
+import { ActivityView } from "./components/ActivityView";
 import { CleanupView } from "./components/CleanupView";
 import { Dashboard } from "./components/Dashboard";
 import { FilterBar } from "./components/FilterBar";
 import { RepoDetailPanel, type DetailTab } from "./components/RepoDetailPanel";
+import { RemotesView } from "./components/RemotesView";
 import { RepoRow } from "./components/RepoRow";
 import { RunSummaryBar } from "./components/RunSummaryBar";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -18,6 +20,7 @@ import { fleetFreshness, isStale } from "./freshness";
 import type { Fix } from "./problems";
 import { describePushes } from "./push";
 import { summarizeRun, type RunStatus } from "./runSummary";
+import { defaultSort, nextSort, sortPaths, type Sort, type SortKey } from "./sorting";
 import { isBusy } from "./state";
 import type { Action, PushPlan } from "./types";
 import { useFleetScan } from "./useFleetScan";
@@ -30,7 +33,9 @@ type Page =
   | { kind: "overview" }
   | { kind: "repos" }
   | { kind: "cleanup"; paths: string[] }
-  | { kind: "unpushed"; paths: string[] };
+  | { kind: "unpushed"; paths: string[] }
+  | { kind: "remotes"; paths: string[] }
+  | { kind: "activity" };
 
 const FIX_ACTIONS: Partial<Record<Fix, Action>> = {
   pull: { type: "pull" },
@@ -49,17 +54,29 @@ function App() {
   const [pathFilter, setPathFilter] = useState<{ label: string; paths: string[] }>();
   const [resultFilter, setResultFilter] = useState<RunStatus>();
   const [anchor, setAnchor] = useState<string>();
+  const [sort, setSort] = useState<Sort>(defaultSort);
   const [detail, setDetail] = useState<{ path: string; tab: DetailTab; branch?: string }>();
 
   const runSummary = manager.lastRun && summarizeRun(manager.lastRun, state.repos);
   const resultPaths =
     resultFilter && runSummary ? new Set(runSummary.byStatus[resultFilter]) : undefined;
   const pinned = pathFilter && new Set(pathFilter.paths);
-  const visible = state.order.filter(
+  const filtered = state.order.filter(
     (path) =>
       (!pinned || pinned.has(path)) &&
       (!resultPaths || resultPaths.has(path)) &&
       matchesFilters(state.repos[path], filters),
+  );
+  const visible = sortPaths(filtered, state.repos, sort);
+  const sortHeader = (key: SortKey, label: string) => (
+    <th aria-sort={sort.key === key ? sort.direction : undefined}>
+      <button className="sort-button" onClick={() => setSort(nextSort(sort, key))}>
+        {label}
+        <span aria-hidden="true">
+          {sort.key === key ? (sort.direction === "ascending" ? " ▲" : " ▼") : ""}
+        </span>
+      </button>
+    </th>
   );
   const targets = visible.filter((path) => state.selected.has(path));
   const hiddenSelected = state.selected.size - targets.length;
@@ -133,6 +150,8 @@ function App() {
     [{ kind: "repos" }, "Repositories"],
     [{ kind: "cleanup", paths: state.order }, "Branch cleanup"],
     [{ kind: "unpushed", paths: state.order }, "Unpushed work"],
+    [{ kind: "remotes", paths: state.order }, "Remotes"],
+    [{ kind: "activity" }, "Activity"],
   ];
 
   return (
@@ -238,6 +257,8 @@ function App() {
                   setResultFilter(undefined);
                   manager.dismissLastRun();
                 }}
+                cancelled={manager.lastRun.cancelled}
+                onCancel={manager.cancelLastRun}
               />
             )}
 
@@ -300,6 +321,19 @@ function App() {
                 paths={page.paths}
                 onClose={() => setPage({ kind: "overview" })}
                 onChanged={changed}
+              />
+            )}
+
+            {page.kind === "activity" && (
+              <ActivityView onClose={() => setPage({ kind: "overview" })} />
+            )}
+
+            {page.kind === "remotes" && (
+              <RemotesView
+                key={page.paths.join("\n")}
+                paths={page.paths}
+                onClose={() => setPage({ kind: "overview" })}
+                runJobs={runJobs}
               />
             )}
 
@@ -386,11 +420,11 @@ function App() {
                           onChange={() => manager.setSelection(visible, !allVisibleSelected)}
                         />
                       </th>
-                      <th>Repository</th>
-                      <th>Branch</th>
-                      <th>Changes</th>
-                      <th>Sync</th>
-                      <th>Last result</th>
+                      {sortHeader("name", "Repository")}
+                      {sortHeader("branch", "Branch")}
+                      {sortHeader("changes", "Changes")}
+                      {sortHeader("sync", "Sync")}
+                      {sortHeader("result", "Last result")}
                       <th />
                     </tr>
                   </thead>

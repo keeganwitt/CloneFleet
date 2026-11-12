@@ -73,6 +73,24 @@ describe("repoProblems", () => {
   });
 });
 
+describe("failure reasons", () => {
+  const failed = (reason: string | null): RepoState => ({
+    ...repo("/a"),
+    result: {
+      outcome: { status: "failed", message: "x", reason: reason as never },
+      followUp: null,
+      commands: [],
+    },
+  });
+
+  it("groups authentication and connectivity failures from the last result", () => {
+    expect(repoProblems(failed("authenticationRequired"))).toEqual([["authRequired", 1]]);
+    expect(repoProblems(failed("hostKeyUnverified"))).toEqual([["authRequired", 1]]);
+    expect(repoProblems(failed("timedOut"))).toEqual([["remoteUnreachable", 1]]);
+    expect(repoProblems(failed(null))).toEqual([]);
+  });
+});
+
 describe("buildOverview", () => {
   it("groups repositories into cards and separates attention from healthy", () => {
     const states = {

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { confirm, open } from "@tauri-apps/plugin-dialog";
+import { confirm, open, save } from "@tauri-apps/plugin-dialog";
 import type {
   Action,
   AppSettings,
@@ -12,6 +12,8 @@ import type {
   CleanupResult,
   FileChange,
   FileDiff,
+  RemoteCheck,
+  RemoteInfo,
   RepoHealth,
   RepoSummary,
   UnpushedReport,
@@ -36,7 +38,9 @@ export const api = {
   removeRepos: (paths: string[]) => invoke<WorkspaceView>("remove_repos", { paths }),
   restoreExcluded: () => invoke<WorkspaceView>("restore_excluded"),
   repoSummary: (path: string) => invoke<RepoSummary>("repo_summary", { path }),
-  runAction: (path: string, action: Action) => invoke<ActionResult>("run_action", { path, action }),
+  runAction: (path: string, action: Action, runId?: number) =>
+    invoke<ActionResult>("run_action", { path, action, runId: runId ?? null }),
+  cancelRun: (runId: number) => invoke<void>("cancel_run", { runId }),
   listChanges: (path: string) => invoke<FileChange[]>("list_changes", { path }),
   analyzeBranches: (path: string, fetch: boolean) =>
     invoke<BranchReport>("analyze_branches", { path, fetch }),
@@ -52,12 +56,20 @@ export const api = {
   getBranchSettings: (path: string) => invoke<BranchSettings>("get_branch_settings", { path }),
   setBranchSettings: (path: string, settings: BranchSettings) =>
     invoke<void>("set_branch_settings", { path, settings }),
+  listRemotes: (path: string) => invoke<RemoteInfo[]>("list_remotes", { path }),
+  checkRemotes: (path: string) => invoke<RemoteCheck[]>("check_remotes", { path }),
   repoHealth: (path: string, staleDays: number) =>
     invoke<RepoHealth>("repo_health", { path, staleDays }),
   branchDiff: (path: string, branch: string, base?: string) =>
     invoke<BranchDiff>("branch_diff", { path, branch, base: base ?? null }),
   workingFileDiff: (path: string, file: string, untracked: boolean) =>
     invoke<FileDiff>("working_file_diff", { path, file, untracked }),
+  saveTextFile: async (defaultName: string, contents: string): Promise<boolean> => {
+    const path = await save({ defaultPath: defaultName });
+    if (!path) return false;
+    await invoke<void>("save_text_file", { path, contents });
+    return true;
+  },
   confirmDestructive: (message: string, okLabel: string) =>
     confirm(message, { title: "Confirm", kind: "warning", okLabel, cancelLabel: "Cancel" }),
   pickDirectories: async (): Promise<string[]> => {

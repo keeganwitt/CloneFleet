@@ -24,7 +24,8 @@ export type Action =
   | { type: "push"; plan: PushPlan }
   | { type: "fetch" }
   | { type: "syncDefaultBranch" }
-  | { type: "renameBranch"; remote: string; from: string; to: string };
+  | { type: "renameBranch"; remote: string; from: string; to: string }
+  | { type: "setRemoteUrl"; remote: string; url: string };
 
 export interface PushPlan {
   remote: string;
@@ -48,12 +49,20 @@ export type SkipReason =
   | "noUpstreamRemote"
   | "notOnDefaultBranch"
   | "noRemote"
-  | "alreadyExists";
+  | "alreadyExists"
+  | "cancelled";
 
 export type Outcome =
   | { status: "succeeded"; message: string }
   | { status: "skipped"; reason: SkipReason; message: string }
-  | { status: "failed"; message: string };
+  | { status: "failed"; message: string; reason?: FailureReason | null };
+
+export type FailureReason =
+  | "authenticationRequired"
+  | "hostKeyUnverified"
+  | "repositoryNotFound"
+  | "networkUnreachable"
+  | "timedOut";
 
 export interface CommandRecord {
   args: string[];
@@ -230,4 +239,20 @@ export interface RepoHealth {
   unpushedBranches: number;
   stashes: number;
   warnings: string[];
+}
+
+export interface RemoteInfo {
+  name: string;
+  fetchUrl: string;
+  pushUrl: string | null;
+}
+
+export type RemoteStatus =
+  "ok" | "redirected" | "notFound" | "authenticationRequired" | "unreachable" | "error";
+
+export interface RemoteCheck {
+  name: string;
+  status: RemoteStatus;
+  redirectUrl: string | null;
+  message: string | null;
 }

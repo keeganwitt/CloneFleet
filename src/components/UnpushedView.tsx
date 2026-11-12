@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { recordCommands } from "../activityLog";
 import { api } from "../api";
 import { formatAge } from "../cleanup";
 import { basename } from "../format";
@@ -128,7 +129,9 @@ export function UnpushedView({ paths, onClose, onChanged }: Props) {
         [...groups].map(async ([repo, shas]) => {
           let items: ItemOutcome[];
           try {
-            items = (await api.dropStashes(repo, shas)).items;
+            const result = await api.dropStashes(repo, shas);
+            recordCommands(repo, "Drop stashes", result.commands);
+            items = result.items;
           } catch (error) {
             items = shas.map((item) => ({ item, status: "failed", message: errorMessage(error) }));
           }

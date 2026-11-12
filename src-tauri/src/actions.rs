@@ -27,6 +27,10 @@ pub enum Action {
         from: String,
         to: String,
     },
+    SetRemoteUrl {
+        remote: String,
+        url: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -46,14 +50,74 @@ pub enum SkipReason {
     NotOnDefaultBranch,
     NoRemote,
     AlreadyExists,
+    Cancelled,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum Outcome {
-    Succeeded { message: String },
-    Skipped { reason: SkipReason, message: String },
-    Failed { message: String },
+    Succeeded {
+        message: String,
+    },
+    Skipped {
+        reason: SkipReason,
+        message: String,
+    },
+    Failed {
+        message: String,
+        reason: Option<FailureReason>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum FailureReason {
+    AuthenticationRequired,
+    HostKeyUnverified,
+    RepositoryNotFound,
+    NetworkUnreachable,
+    TimedOut,
+}
+
+pub fn classify_failure(message: &str) -> Option<FailureReason> {
+    let text = message.to_lowercase();
+    let any = |needles: &[&str]| needles.iter().any(|n| text.contains(n));
+    if any(&["host key verification failed"]) {
+        Some(FailureReason::HostKeyUnverified)
+    } else if any(&[
+        "authentication failed",
+        "could not read username",
+        "could not read password",
+        "terminal prompts disabled",
+        "permission denied (publickey",
+        "http basic: access denied",
+        "invalid username or password",
+        "returned error: 401",
+        "returned error: 403",
+    ]) || (text.contains("permission to ") && text.contains(" denied"))
+    {
+        Some(FailureReason::AuthenticationRequired)
+    } else if any(&[
+        "repository not found",
+        "does not appear to be a git repository",
+        "returned error: 404",
+        "could not be found or you don't have permission",
+    ]) {
+        Some(FailureReason::RepositoryNotFound)
+    } else if any(&["timed out after"]) {
+        Some(FailureReason::TimedOut)
+    } else if any(&[
+        "could not resolve host",
+        "connection timed out",
+        "connection refused",
+        "network is unreachable",
+        "failed to connect",
+        "operation timed out",
+    ]) {
+        Some(FailureReason::NetworkUnreachable)
+    } else {
+        None
+    }
 }
 
 impl Outcome {
@@ -71,8 +135,10 @@ impl Outcome {
     }
 
     pub(crate) fn failed(message: impl Into<String>) -> Self {
+        let message = message.into();
         Self::Failed {
-            message: message.into(),
+            reason: classify_failure(&message),
+            message,
         }
     }
 }
@@ -111,6 +177,14 @@ pub async fn summarize(git: &mut Git) -> Result<RepoSummary, GitError> {
     })
 }
 
+pub fn cancelled() -> ActionResult {
+    ActionResult {
+        outcome: Outcome::skipped(SkipReason::Cancelled, "Cancelled before it started"),
+        follow_up: None,
+        commands: Vec::new(),
+    }
+}
+
 pub async fn run_action(mut git: Git, action: &Action) -> ActionResult {
     let alone = |outcome: Result<Outcome, GitError>| outcome.map(|o| (o, None));
     let (outcome, follow_up) = match action {
@@ -124,6 +198,9 @@ pub async fn run_action(mut git: Git, action: &Action) -> ActionResult {
         Action::Push { plan } => alone(push(&mut git, plan).await),
         Action::Fetch => fetch_all(&mut git).await,
         Action::SyncDefaultBranch => sync_default_branch(&mut git).await,
+        Action::SetRemoteUrl { remote, url } => {
+            alone(crate::remote_health::set_remote_url(&mut git, remote, url).await)
+        }
         Action::RenameBranch { remote, from, to } => {
             alone(rename_branch(&mut git, remote, from, to).await)
         }
@@ -476,7 +553,7 @@ mod tests {
 
         assert!(matches!(
             act(&fixture, Action::Pull).await,
-            Outcome::Failed { message } if message.contains("diverged")
+            Outcome::Failed { message, .. } if message.contains("diverged")
         ));
         assert_eq!(fixture.git(&fixture.work, &["rev-parse", "HEAD"]), before);
     }
@@ -582,6 +659,55 @@ mod tests {
                 .iter()
                 .any(|c| c.args.first().map(String::as_str) == Some("pull"))
         );
+    }
+
+    #[test]
+    fn classifies_common_network_failures() {
+        let cases = [
+            (
+                "fatal: could not read Username for 'https://github.com': terminal prompts disabled",
+                Some(FailureReason::AuthenticationRequired),
+            ),
+            (
+                "git@github.com: Permission denied (publickey).",
+                Some(FailureReason::AuthenticationRequired),
+            ),
+            (
+                "remote: Permission to me/repo.git denied to me.",
+                Some(FailureReason::AuthenticationRequired),
+            ),
+            (
+                "Host key verification failed.",
+                Some(FailureReason::HostKeyUnverified),
+            ),
+            (
+                "remote: Repository not found.",
+                Some(FailureReason::RepositoryNotFound),
+            ),
+            (
+                "ssh: Could not resolve hostname x: nodename nor servname provided",
+                Some(FailureReason::NetworkUnreachable),
+            ),
+            (
+                "fatal: unable to access 'https://x/': Could not resolve host: x",
+                Some(FailureReason::NetworkUnreachable),
+            ),
+            (
+                "git fetch timed out after 120s",
+                Some(FailureReason::TimedOut),
+            ),
+            ("Not possible to fast-forward", None),
+        ];
+        for (message, expected) in cases {
+            assert_eq!(classify_failure(message), expected, "{message}");
+        }
+        assert!(matches!(
+            Outcome::failed("Authentication failed for 'https://x'"),
+            Outcome::Failed {
+                reason: Some(FailureReason::AuthenticationRequired),
+                ..
+            }
+        ));
     }
 
     #[test]

@@ -125,8 +125,8 @@ describe("Dashboard", () => {
 
     await waitFor(() =>
       expect(calls.filter((c) => c.cmd === "run_action").map((c) => c.args)).toEqual([
-        { path: "/src/api", action: { type: "pull" } },
-        { path: "/src/web", action: { type: "pull" } },
+        { path: "/src/api", action: { type: "pull" }, runId: expect.any(Number) },
+        { path: "/src/web", action: { type: "pull" }, runId: expect.any(Number) },
       ]),
     );
     expect(await screen.findByRole("status", { name: "Last run" })).toHaveTextContent(

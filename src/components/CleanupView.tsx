@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
+import { recordCommands } from "../activityLog";
 import { api } from "../api";
 import {
   BRANCH_CATEGORIES,
@@ -181,7 +182,9 @@ export function CleanupView({ paths, onClose, onChanged, onOpenBranch }: Props) 
     const unmerged = new Set(unmergedTargets);
     await applyCleanup(branchTargets, async (repo, names) => {
       const allowUnmerged = names.some((name) => unmerged.has(key(repo, name)));
-      return (await api.deleteBranches(repo, names, allowUnmerged)).items;
+      const result = await api.deleteBranches(repo, names, allowUnmerged);
+      recordCommands(repo, "Delete branches", result.commands);
+      return result.items;
     });
   };
 
@@ -189,11 +192,11 @@ export function CleanupView({ paths, onClose, onChanged, onOpenBranch }: Props) 
     let message = `Remove ${plural(worktreeTargets.length, "worktree")}?`;
     if (deleteWorktreeBranches) message += "\n\nTheir merged branches will also be deleted.";
     if (!(await api.confirmDestructive(message, "Remove worktrees"))) return;
-    await applyCleanup(
-      worktreeTargets,
-      async (repo, worktrees) =>
-        (await api.removeWorktrees(repo, worktrees, deleteWorktreeBranches)).items,
-    );
+    await applyCleanup(worktreeTargets, async (repo, worktrees) => {
+      const result = await api.removeWorktrees(repo, worktrees, deleteWorktreeBranches);
+      recordCommands(repo, "Remove worktrees", result.commands);
+      return result.items;
+    });
   };
 
   return (

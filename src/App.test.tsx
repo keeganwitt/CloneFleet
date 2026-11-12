@@ -34,6 +34,8 @@ interface Backend {
   confirmed?: boolean;
   gitError?: string;
   health?: Record<string, Record<string, number>>;
+  cancelledRuns?: number[];
+  slow?: boolean;
 }
 
 function followUpFor(backend: Backend, action: Action, path: string): Action | null {
@@ -129,6 +131,25 @@ function mockBackend(backend: Backend) {
         return { ...summary, ...backend.summaries?.[args.path as string] };
       case "run_action": {
         const action = args.action as Action;
+        if (backend.slow) {
+          return new Promise((resolve) =>
+            setTimeout(
+              () =>
+                resolve({
+                  outcome: backend.cancelledRuns?.includes(args.runId as number)
+                    ? {
+                        status: "skipped",
+                        reason: "cancelled",
+                        message: "Cancelled before it started",
+                      }
+                    : { status: "succeeded", message: `${action.type} done` },
+                  followUp: null,
+                  commands: [],
+                }),
+              50,
+            ),
+          );
+        }
         const outcome = backend.outcomesByPath?.[args.path as string] ??
           backend.outcomes?.[action.type] ?? {
             status: "succeeded",
@@ -154,6 +175,9 @@ function mockBackend(backend: Backend) {
         return "/picked";
       case "analyze_unpushed":
         return { hasRemotes: true, branches: [], stashes: [], dirtyWorktrees: [], warnings: [] };
+      case "cancel_run":
+        backend.cancelledRuns = [...(backend.cancelledRuns ?? []), args.runId as number];
+        return null;
       case "plugin:dialog|message":
         return backend.confirmed === false ? "Cancel" : "Push";
       case "remove_repos": {
@@ -531,6 +555,44 @@ describe("App", () => {
       expect(actionCalls(calls).at(-1)).toEqual(["/src/gamma", { type: "fetch" }]),
     );
     expect(await screen.findByText("alpha")).toBeInTheDocument();
+  });
+
+  it("cancels a running bulk action", async () => {
+    const user = userEvent.setup();
+    const calls = mockBackend({ repos: ["/src/alpha", "/src/beta"], slow: true });
+    await renderRepositories();
+    await user.click(await screen.findByRole("button", { name: "Select all 2" }));
+    await user.click(screen.getByRole("button", { name: "Fetch" }));
+    const summary = await screen.findByRole("status", { name: "Last run" });
+    await user.click(within(summary).getByRole("button", { name: "Cancel" }));
+
+    expect(within(summary).queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+    const runId = calls.find((c) => c.cmd === "run_action")?.args.runId;
+    expect(calls.find((c) => c.cmd === "cancel_run")?.args).toEqual({ runId });
+    await waitFor(() => expect(summary).toHaveTextContent("2 skipped"));
+    expect(summary).toHaveTextContent("(2 cancelled)");
+  });
+
+  it("sorts the table by a column and toggles direction", async () => {
+    const user = userEvent.setup();
+    mockBackend({
+      repos: ["/src/alpha", "/src/beta", "/src/gamma"],
+      summaries: { "/src/beta": { behind: 9 }, "/src/gamma": { behind: 2 } },
+    });
+    await renderRepositories();
+    await screen.findByText("alpha");
+    const names = () =>
+      screen.getAllByRole("button", { name: /^Open details for / }).map((b) => b.textContent);
+    expect(names()).toEqual(["alpha", "beta", "gamma"]);
+
+    await user.click(screen.getByRole("button", { name: "Sync" }));
+    await waitFor(() => expect(names()).toEqual(["beta", "gamma", "alpha"]));
+    expect(screen.getByRole("columnheader", { name: /Sync/ })).toHaveAttribute(
+      "aria-sort",
+      "descending",
+    );
+    await user.click(screen.getByRole("button", { name: /Sync/ }));
+    expect(names()).toEqual(["alpha", "gamma", "beta"]);
   });
 
   it("selects a range with shift-click", async () => {

@@ -8,6 +8,7 @@ mod discovery;
 mod fork;
 mod git;
 mod health;
+mod remote_health;
 mod remotes;
 mod status;
 mod store;
@@ -16,7 +17,7 @@ mod test_support;
 mod unpushed;
 mod workspace;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -31,6 +32,7 @@ use cleanup::CleanupResult;
 use diff::{BranchDiff, FileDiff};
 use git::Git;
 use health::RepoHealth;
+use remote_health::{RemoteCheck, RemoteInfo};
 use store::{BranchSettings, Config};
 use unpushed::UnpushedReport;
 use workspace::WorkspaceView;
@@ -43,6 +45,7 @@ struct AppState {
     repos: Mutex<BTreeSet<PathBuf>>,
     detected_git: Option<PathBuf>,
     permits: Arc<Semaphore>,
+    cancelled_runs: Mutex<HashSet<u64>>,
 }
 
 impl AppState {
@@ -57,6 +60,7 @@ impl AppState {
             repos: Mutex::new(BTreeSet::new()),
             detected_git: app_settings::detect_git(std::env::var_os("PATH")),
             permits: Arc::new(Semaphore::new(MAX_CONCURRENT_REPOS)),
+            cancelled_runs: Mutex::new(HashSet::new()),
         })
     }
 
@@ -119,6 +123,10 @@ impl AppState {
         }
     }
 
+    fn is_cancelled(&self, run_id: Option<u64>) -> bool {
+        run_id.is_some_and(|id| self.cancelled_runs.lock().unwrap().contains(&id))
+    }
+
     fn ensure_known(&self, path: &Path) -> Result<(), String> {
         if self.repos.lock().unwrap().contains(path) {
             Ok(())
@@ -164,6 +172,13 @@ async fn set_settings(
         }
     })?;
     Ok(state.settings_view().await)
+}
+
+#[tauri::command]
+async fn save_text_file(path: PathBuf, contents: String) -> Result<(), String> {
+    tokio::fs::write(&path, contents)
+        .await
+        .map_err(|e| format!("Could not save {}: {e}", path.display()))
 }
 
 #[tauri::command]
@@ -257,11 +272,20 @@ async fn repo_summary(path: PathBuf, state: State<'_, AppState>) -> Result<RepoS
 async fn run_action(
     path: PathBuf,
     action: Action,
+    run_id: Option<u64>,
     state: State<'_, AppState>,
 ) -> Result<ActionResult, String> {
     let git = state.git(&path)?;
     let _permit = state.permits.acquire().await.map_err(|e| e.to_string())?;
+    if state.is_cancelled(run_id) {
+        return Ok(actions::cancelled());
+    }
     Ok(actions::run_action(git, &action).await)
+}
+
+#[tauri::command]
+fn cancel_run(run_id: u64, state: State<'_, AppState>) {
+    state.cancelled_runs.lock().unwrap().insert(run_id);
 }
 
 #[tauri::command]
@@ -389,6 +413,29 @@ async fn get_branch_settings(
 }
 
 #[tauri::command]
+async fn list_remotes(
+    path: PathBuf,
+    state: State<'_, AppState>,
+) -> Result<Vec<RemoteInfo>, String> {
+    let mut git = state.git(&path)?;
+    remote_health::list_remotes(&mut git)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn check_remotes(
+    path: PathBuf,
+    state: State<'_, AppState>,
+) -> Result<Vec<RemoteCheck>, String> {
+    let mut git = state.git(&path)?;
+    let _permit = state.permits.acquire().await.map_err(|e| e.to_string())?;
+    remote_health::check_remotes(&mut git)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn repo_health(
     path: PathBuf,
     stale_days: u32,
@@ -442,6 +489,7 @@ pub fn run() {
             get_settings,
             set_settings,
             check_git,
+            save_text_file,
             load_workspace,
             open_directories,
             open_recent,
@@ -453,6 +501,7 @@ pub fn run() {
             restore_excluded,
             repo_summary,
             run_action,
+            cancel_run,
             list_changes,
             analyze_branches,
             delete_branches,
@@ -463,6 +512,8 @@ pub fn run() {
             get_branch_settings,
             set_branch_settings,
             repo_health,
+            list_remotes,
+            check_remotes,
             branch_diff,
             working_file_diff
         ])
@@ -520,6 +571,17 @@ mod tests {
         let config = state.config.lock().unwrap();
         assert!(config.roots.is_empty());
         assert_eq!(config.recent, vec![vec![PathBuf::from("/a")]]);
+    }
+
+    #[test]
+    fn tracks_cancelled_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = AppState::new(dir.path().join("config.json")).unwrap();
+        assert!(!state.is_cancelled(Some(1)));
+        state.cancelled_runs.lock().unwrap().insert(1);
+        assert!(state.is_cancelled(Some(1)));
+        assert!(!state.is_cancelled(Some(2)));
+        assert!(!state.is_cancelled(None));
     }
 
     #[test]

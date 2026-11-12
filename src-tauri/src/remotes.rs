@@ -310,7 +310,7 @@ mod tests {
         );
         let (outcome, _) = act(&fixture, Action::Fetch).await;
         assert!(
-            matches!(&outcome, Outcome::Failed { message }
+            matches!(&outcome, Outcome::Failed { message, .. }
                 if message.starts_with("Fetched origin; could not fetch broken: ")),
             "{outcome:?}"
         );

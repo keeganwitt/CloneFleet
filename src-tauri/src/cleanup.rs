@@ -158,7 +158,7 @@ async fn remove_one_worktree(
         let sha = worktree.head.as_deref().unwrap_or_default();
         match force_delete_branch(git, branch, sha).await? {
             Outcome::Succeeded { message: deleted } => message = format!("{message}; {deleted}"),
-            Outcome::Failed { message: error } | Outcome::Skipped { message: error, .. } => {
+            Outcome::Failed { message: error, .. } | Outcome::Skipped { message: error, .. } => {
                 message = format!("{message}; could not delete {branch}: {error}")
             }
         }

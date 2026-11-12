@@ -8,6 +8,30 @@ use tokio::process::Command;
 use crate::store::BranchSettings;
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(300);
+const NETWORK_TIMEOUT: Duration = Duration::from_secs(120);
+const NETWORK_COMMANDS: &[&str] = &["fetch", "pull", "push", "ls-remote", "clone"];
+
+fn subcommand<'a>(args: &[&'a str]) -> Option<&'a str> {
+    let mut rest = args.iter();
+    while let Some(arg) = rest.next() {
+        match *arg {
+            "-c" | "-C" => {
+                rest.next();
+            }
+            option if option.starts_with('-') => {}
+            command => return Some(command),
+        }
+    }
+    None
+}
+
+fn timeout_for(args: &[&str]) -> Duration {
+    match subcommand(args) {
+        Some(command) if NETWORK_COMMANDS.contains(&command) => NETWORK_TIMEOUT,
+        Some("remote") if args.contains(&"set-head") => NETWORK_TIMEOUT,
+        _ => COMMAND_TIMEOUT,
+    }
+}
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -88,11 +112,12 @@ impl Git {
             command.creation_flags(0x0800_0000);
         }
 
-        let output = tokio::time::timeout(COMMAND_TIMEOUT, command.output())
+        let timeout = timeout_for(args);
+        let output = tokio::time::timeout(timeout, command.output())
             .await
             .map_err(|_| GitError::Timeout {
                 args: args.join(" "),
-                seconds: COMMAND_TIMEOUT.as_secs(),
+                seconds: timeout.as_secs(),
             })??;
 
         let record = CommandRecord {
@@ -148,6 +173,21 @@ mod tests {
             stdout: stdout.into(),
             stderr: stderr.into(),
         }
+    }
+
+    #[test]
+    fn network_commands_get_a_shorter_timeout() {
+        assert_eq!(subcommand(&["-c", "x=y", "fetch", "origin"]), Some("fetch"));
+        assert_eq!(subcommand(&["-C", "/dir", "status"]), Some("status"));
+        assert_eq!(
+            timeout_for(&["-c", "a=b", "fetch", "--prune"]),
+            NETWORK_TIMEOUT
+        );
+        assert_eq!(
+            timeout_for(&["remote", "set-head", "origin", "--auto"]),
+            NETWORK_TIMEOUT
+        );
+        assert_eq!(timeout_for(&["status", "--porcelain=v2"]), COMMAND_TIMEOUT);
     }
 
     #[test]

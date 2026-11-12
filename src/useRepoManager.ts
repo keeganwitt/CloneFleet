@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { api } from "./api";
 import { ACTION_LABELS } from "./actionLabels";
+import { recordCommands } from "./activityLog";
 import { basename } from "./format";
 import type { Run } from "./runSummary";
 import { initialState, reducer } from "./state";
@@ -112,7 +113,7 @@ export function useRepoManager() {
   );
 
   const runActions = useCallback(
-    async (jobs: [path: string, action: Action][]) => {
+    async (jobs: [path: string, action: Action][], runId?: number) => {
       for (const [path, action] of jobs) {
         dispatch({ type: "actionStarted", paths: [path], action: action.type });
       }
@@ -120,7 +121,7 @@ export function useRepoManager() {
         jobs.map(async ([path, action]) => {
           let result: ActionResult;
           try {
-            result = await api.runAction(path, action);
+            result = await api.runAction(path, action, runId);
           } catch (error) {
             result = {
               outcome: { status: "failed", message: errorMessage(error) },
@@ -128,6 +129,7 @@ export function useRepoManager() {
               commands: [],
             };
           }
+          recordCommands(path, ACTION_LABELS[action.type], result.commands);
           dispatch({ type: "actionFinished", path, result });
           await refreshSummary(path);
         }),
@@ -144,14 +146,23 @@ export function useRepoManager() {
 
   const [lastRun, setLastRun] = useState<Run>();
 
+  const nextRunId = useRef(1);
+
   const runBulk = useCallback(
     (jobs: [path: string, action: Action][]) => {
       if (jobs.length === 0) return Promise.resolve();
-      setLastRun({ label: ACTION_LABELS[jobs[0][1].type], paths: jobs.map(([path]) => path) });
-      return runActions(jobs);
+      const id = nextRunId.current++;
+      setLastRun({ id, label: ACTION_LABELS[jobs[0][1].type], paths: jobs.map(([path]) => path) });
+      return runActions(jobs, id);
     },
     [runActions],
   );
+
+  const cancelLastRun = useCallback(() => {
+    if (!lastRun) return;
+    setLastRun({ ...lastRun, cancelled: true });
+    api.cancelRun(lastRun.id).catch((error) => setNotice(errorMessage(error)));
+  }, [lastRun]);
 
   const refreshSummaries = useCallback(
     (paths: string[]) => Promise.all(paths.map(refreshSummary)),
@@ -180,6 +191,7 @@ export function useRepoManager() {
     runBulk,
     lastRun,
     dismissLastRun: () => setLastRun(undefined),
+    cancelLastRun,
     refreshSummaries,
   };
 }

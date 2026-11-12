@@ -3,6 +3,7 @@ import { basename, describeChanges, describeSync, parentDirectory } from "../for
 import type { RepoState } from "../state";
 import { formatAge } from "../cleanup";
 import { isStale } from "../freshness";
+import { FAILURE_HINTS } from "../actionLabels";
 import { followUpOf } from "../followUps";
 import type { Action } from "../types";
 import { CommandLog } from "./CommandLog";
@@ -17,6 +18,7 @@ const RUNNING_LABELS: Record<Action["type"], string> = {
   fetch: "Fetching…",
   syncDefaultBranch: "Checking default branch…",
   renameBranch: "Renaming…",
+  setRemoteUrl: "Updating remote…",
 };
 
 function followUpLabel(action: Action): string {
@@ -146,7 +148,12 @@ export function RepoRow({
           {repo.runningAction ? (
             <span className="muted">{RUNNING_LABELS[repo.runningAction]}</span>
           ) : outcome ? (
-            <span className={`outcome-${outcome.status}`}>{outcome.message}</span>
+            <>
+              <span className={`outcome-${outcome.status}`}>{outcome.message}</span>
+              {outcome.status === "failed" && outcome.reason && FAILURE_HINTS[outcome.reason] && (
+                <div className="muted hint">{FAILURE_HINTS[outcome.reason]}</div>
+              )}
+            </>
           ) : null}
           {canResolveChanges && commitMessage === undefined && (
             <div className="inline-actions">

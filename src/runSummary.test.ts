@@ -17,12 +17,12 @@ describe("summarizeRun", () => {
       "/b": finished("/b", { status: "skipped", reason: "uncommittedChanges", message: "" }),
       "/c": finished("/c", { status: "skipped", reason: "uncommittedChanges", message: "" }),
       "/d": finished("/d", { status: "skipped", reason: "detachedHead", message: "" }),
-      "/e": finished("/e", { status: "failed", message: "" }),
+      "/e": finished("/e", { status: "failed", message: "", reason: "authenticationRequired" }),
       "/f": { path: "/f", loadingSummary: false, runningAction: "pull" },
       "/other": finished("/other", { status: "failed", message: "" }),
     };
     const summary = summarizeRun(
-      { label: "Pull", paths: ["/a", "/b", "/c", "/d", "/e", "/f", "/missing"] },
+      { id: 1, label: "Pull", paths: ["/a", "/b", "/c", "/d", "/e", "/f", "/missing"] },
       repos,
     );
     expect(summary.running).toBe(1);
@@ -31,9 +31,10 @@ describe("summarizeRun", () => {
       skipped: ["/b", "/c", "/d"],
       failed: ["/e"],
     });
-    expect(summary.skipReasons).toEqual([
+    expect(summary.reasons).toEqual([
       ["uncommitted changes", 2],
       ["detached HEAD", 1],
+      ["authentication required", 1],
     ]);
   });
 });
