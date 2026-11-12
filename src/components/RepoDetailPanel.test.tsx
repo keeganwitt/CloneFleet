@@ -141,6 +141,9 @@ describe("RepoDetailPanel", () => {
 
     expect(await screen.findByText("+more")).toBeInTheDocument();
     expect(screen.getByText("+2 −1")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close diff for notes.md" }));
+    expect(screen.queryByText("+more")).not.toBeInTheDocument();
+    expect(screen.getByText("Select a file to see its changes.")).toBeInTheDocument();
     expect(calls.find((c) => c.cmd === "working_file_diff")?.args).toEqual({
       path: "/src/repo",
       file: "notes.md",

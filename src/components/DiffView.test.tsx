@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { DiffView, FileDiffList, changeCounts, classifyDiffLine } from "./DiffView";
 
@@ -51,6 +52,29 @@ describe("DiffView", () => {
 });
 
 describe("FileDiffList", () => {
+  const many = Array.from({ length: 7 }, (_, i) => ({
+    path: `f${i}.txt`,
+    oldPath: null,
+    additions: 1,
+    deletions: 0,
+    patch: `diff --git a/f${i}.txt b/f${i}.txt\n@@ -0,0 +1 @@\n+line ${i}\n`,
+    truncated: false,
+  }));
+
+  it("collapses large diffs and expands or collapses everything on request", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<FileDiffList files={many} />);
+    const openCount = () => container.querySelectorAll("details[open]").length;
+    expect(openCount()).toBe(0);
+    await user.click(screen.getByRole("button", { name: "Expand all" }));
+    expect(openCount()).toBe(7);
+    expect(screen.getByRole("button", { name: "Expand all" })).toBeDisabled();
+    await user.click(screen.getByText("f3.txt"));
+    expect(openCount()).toBe(6);
+    await user.click(screen.getByRole("button", { name: "Collapse all" }));
+    expect(openCount()).toBe(0);
+  });
+
   it("lists files with change counts and renames", () => {
     render(
       <FileDiffList

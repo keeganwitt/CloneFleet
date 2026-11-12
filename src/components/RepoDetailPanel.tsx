@@ -164,7 +164,13 @@ function ChangesTab({ path, summary }: { path: string; summary: RepoSummary | un
     <div className="split">
       <ChangesPanel path={path} summary={summary} selected={selected} onSelect={setSelected} />
       {selected ? (
-        <WorkingFileDiff key={selected.path} path={path} change={selected} summary={summary} />
+        <WorkingFileDiff
+          key={selected.path}
+          path={path}
+          change={selected}
+          summary={summary}
+          onClose={() => setSelected(undefined)}
+        />
       ) : (
         <p className="muted">Select a file to see its changes.</p>
       )}
@@ -176,10 +182,12 @@ function WorkingFileDiff({
   path,
   change,
   summary,
+  onClose,
 }: {
   path: string;
   change: FileChange;
   summary: RepoSummary | undefined;
+  onClose: () => void;
 }) {
   const diff = useLoad<FileDiff>(
     () => api.workingFileDiff(path, change.path, change.kind === "untracked"),
@@ -189,9 +197,14 @@ function WorkingFileDiff({
   if (diff.status === "error") return <p className="error">{diff.error}</p>;
   return (
     <div>
-      <p className="muted">
-        <code>{change.path}</code> {changeCounts(diff.value)}
-      </p>
+      <div className="toolbar diff-header">
+        <code>{change.path}</code>
+        <span className="muted">{changeCounts(diff.value)}</span>
+        <span className="spacer" />
+        <button className="link" aria-label={`Close diff for ${change.path}`} onClick={onClose}>
+          ×
+        </button>
+      </div>
       <DiffView patch={diff.value.patch} truncated={diff.value.truncated} />
     </div>
   );

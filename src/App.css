@@ -470,9 +470,41 @@ input.days {
 
 .file-diff > summary {
   display: flex;
+  align-items: baseline;
   gap: 8px;
   cursor: pointer;
-  padding: 4px 0;
+  padding: 4px 6px;
+  border-radius: 6px;
+  list-style: none;
+}
+
+.file-diff > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* A flex summary hides the default disclosure triangle, so draw one. */
+.file-diff > summary::before {
+  content: "▸";
+  flex: none;
+  width: 1em;
+  color: var(--muted);
+}
+
+.file-diff[open] > summary::before {
+  content: "▾";
+}
+
+.file-diff > summary:hover {
+  background: var(--selected);
+}
+
+.file-diff > summary code {
+  overflow-wrap: anywhere;
+}
+
+.file-diff > summary .muted {
+  margin-left: auto;
+  flex: none;
 }
 
 .detail-panel {

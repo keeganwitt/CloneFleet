@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { FileDiff } from "../types";
 
 export type DiffLineKind = "header" | "hunk" | "add" | "delete" | "context" | "note";
@@ -48,11 +49,41 @@ export function changeCounts(file: Pick<FileDiff, "additions" | "deletions">): s
 }
 
 export function FileDiffList({ files }: { files: FileDiff[] }) {
+  const [open, setOpen] = useState<ReadonlySet<string>>(
+    () => new Set(files.length <= 5 ? files.map((f) => f.path) : []),
+  );
   if (files.length === 0) return <p className="muted">No file changes.</p>;
+  const setFile = (path: string, isOpen: boolean) =>
+    setOpen((current) => {
+      if (current.has(path) === isOpen) return current;
+      const next = new Set(current);
+      if (isOpen) next.add(path);
+      else next.delete(path);
+      return next;
+    });
   return (
     <div className="file-diffs">
+      {files.length > 1 && (
+        <div className="toolbar">
+          <button
+            className="link"
+            disabled={open.size === files.length}
+            onClick={() => setOpen(new Set(files.map((f) => f.path)))}
+          >
+            Expand all
+          </button>
+          <button className="link" disabled={open.size === 0} onClick={() => setOpen(new Set())}>
+            Collapse all
+          </button>
+        </div>
+      )}
       {files.map((file) => (
-        <details key={file.path} className="file-diff" open={files.length <= 5}>
+        <details
+          key={file.path}
+          className="file-diff"
+          open={open.has(file.path)}
+          onToggle={(event) => setFile(file.path, event.currentTarget.open)}
+        >
           <summary>
             <code>{file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}</code>
             <span className="muted">{changeCounts(file)}</span>
