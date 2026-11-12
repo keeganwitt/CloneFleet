@@ -4,6 +4,8 @@ import { clearMocks } from "@tauri-apps/api/mocks";
 import { afterEach } from "vitest";
 
 afterEach(() => {
-  cleanup();
-  clearMocks();
+  if (typeof window !== "undefined") {
+    cleanup();
+    clearMocks();
+  }
 });

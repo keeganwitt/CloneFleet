@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    needs: test
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin --bundles dmg
+            rust-targets: aarch64-apple-darwin
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin --bundles dmg
+            rust-targets: x86_64-apple-darwin
+          - platform: ubuntu-22.04
+            args: --bundles deb,rpm
+            rust-targets: ""
+          - platform: windows-latest
+            args: --bundles nsis
+            rust-targets: ""
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Tauri Linux dependencies
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config curl wget file libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: CloneFleet ${{ github.ref_name }}
+          releaseDraft: true
+          args: ${{ matrix.args }}
+      - name: Verify macOS app signature
+        if: runner.os == 'macOS'
+        shell: pwsh
+        run: |
+          $dmg = Get-Item "src-tauri/target/${{ matrix.rust-targets }}/release/bundle/dmg/*.dmg" -ErrorAction Stop
+          $mountPath = Join-Path $env:RUNNER_TEMP "clonefleet-dmg"
+          New-Item -ItemType Directory -Path $mountPath -Force | Out-Null
+          hdiutil attach -readonly -nobrowse -mountpoint $mountPath $dmg.FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          try {
+            codesign --verify --deep --strict --verbose=2 "$mountPath/CloneFleet.app"
+            if ($LASTEXITCODE -ne 0) { throw "App signature verification failed: $LASTEXITCODE" }
+          } finally {
+            hdiutil detach $mountPath
+            if ($LASTEXITCODE -ne 0) { throw "DMG detach failed: $LASTEXITCODE" }
+          }

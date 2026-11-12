@@ -58,6 +58,49 @@ Rust tests create temporary repositories with local bare remotes, so they need `
 
 CI runs on GitHub Actions (`.github/workflows/ci.yml`): frontend lint, format, tests, and build on Linux, and Rust clippy and tests on Linux, macOS, and Windows.
 
+### Building installers
+
+Install dependencies with `pnpm install --frozen-lockfile`, then run the appropriate command on the OS you are building for:
+
+| Build host | Command                              | Installer output                                                                            |
+| ---------- | ------------------------------------ | ------------------------------------------------------------------------------------------- |
+| Linux      | `pnpm tauri build --bundles deb,rpm` | `src-tauri/target/release/bundle/deb/*.deb` and `src-tauri/target/release/bundle/rpm/*.rpm` |
+| macOS      | `pnpm tauri build --bundles dmg`     | `src-tauri/target/release/bundle/dmg/*.dmg`                                                 |
+| Windows    | `pnpm tauri build --bundles nsis`    | `src-tauri/target/release/bundle/nsis/*-setup.exe`                                          |
+
+Tauri builds the frontend and Rust application before packaging. For macOS, install the desired Rust target with `rustup target add aarch64-apple-darwin` (Apple Silicon) or `rustup target add x86_64-apple-darwin` (Intel), then add `--target <target>` to the build command. Explicit-target builds write installers under `src-tauri/target/<target>/release/bundle/`.
+
+Linux release packages are built on Ubuntu 22.04 to avoid requiring newer glibc versions. Destination systems still need compatible GTK and WebKitGTK 4.1 libraries. See [Tauri's Linux compatibility guidance](https://v2.tauri.app/distribute/debian/#limitations).
+
+### Releases
+
+From a clean `main` branch, run:
+
+```sh
+pnpm release 0.1.0
+```
+
+The script accepts a stable version (`X.Y.Z`, optionally prefixed with `v`). It checks for existing local and remote tags and requires local `main` to contain the latest `origin/main` commit. It updates `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and the CloneFleet package in `src-tauri/Cargo.lock`, commits any version changes, creates an annotated `v<version>` tag, and pushes the commit and tag atomically to `origin`. Versions cannot go backwards. If the files already have the requested version, it tags the current commit without creating a redundant commit.
+
+Commit the release script before using it. If the push fails, the local commit and tag remain available, and the script prints a command to retry the push.
+
+Pushing a `v*` tag runs [CI](.github/workflows/ci.yml), then the [release workflow](.github/workflows/release.yml) builds Linux x86_64 `.deb` and `.rpm` packages, Apple Silicon and Intel `.dmg` files, and a Windows x86_64 NSIS installer. Installers are uploaded to a draft GitHub release for review before publication. The macOS jobs mount each DMG and verify the bundled app's signature. Review the workflow results, installers, and release notes before publishing the draft.
+
+### Installing builds without a verified publisher
+
+macOS builds use an [ad hoc code signature](https://v2.tauri.app/distribute/sign/macos/#ad-hoc-signing), without Apple Developer ID signing or notarization. Windows builds are unsigned.
+
+- **macOS:** Download the `aarch64` DMG for Apple Silicon or the `x64` DMG for Intel, then drag CloneFleet into Applications. Try opening it, then use **System Settings → Privacy & Security → Open Anyway** and confirm. See [Apple's instructions](https://support.apple.com/en-us/102445).
+- **Windows:** If SmartScreen prompts, choose **More info → Run anyway**.
+
+If macOS reports that CloneFleet is damaged, first confirm the download came from this repository's GitHub release. After copying it to Applications, you can remove its download quarantine attribute:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/CloneFleet.app
+```
+
+This bypasses the download quarantine check; it does not verify the publisher or repair a broken signature. If opening still fails, collect signature diagnostics with `codesign --verify --deep --strict --verbose=2 /Applications/CloneFleet.app`.
+
 ### App icon
 
 [`assets/clonefleet.svg`](assets/clonefleet.svg) is the authoritative source for the logo and app icon. Edit this vector artwork, then regenerate the platform icons in `src-tauri/icons`:
