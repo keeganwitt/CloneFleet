@@ -15,7 +15,8 @@ export type ProblemKind =
   | "stashes"
   | "mergedBranches"
   | "staleBranches"
-  | "removableWorktrees";
+  | "removableWorktrees"
+  | "staleWorktrees";
 
 export type Section = "attention" | "updates" | "work" | "housekeeping";
 export type Severity = "danger" | "warning" | "neutral";
@@ -110,6 +111,13 @@ export const PROBLEMS: Record<ProblemKind, ProblemInfo> = {
     title: (n, items) =>
       `${items} ${items === 1 ? "worktree" : "worktrees"} ready to remove in ${repos(n)}`,
   },
+  staleWorktrees: {
+    section: "housekeeping",
+    severity: "neutral",
+    fix: "cleanup",
+    title: (n, items) =>
+      `${items} stale unmerged ${items === 1 ? "worktree" : "worktrees"} in ${repos(n)}`,
+  },
 };
 
 export const SECTIONS: [Section, string][] = [
@@ -149,8 +157,10 @@ export function repoProblems(repo: RepoState, health?: RepoHealth): [ProblemKind
     if (health.mergedBranches > 0) found.push(["mergedBranches", health.mergedBranches]);
     const stale = health.staleBranches + health.remoteDeletedBranches;
     if (stale > 0) found.push(["staleBranches", stale]);
-    if (health.removableWorktrees > 0)
+    if (health.removableWorktrees > 0) {
       found.push(["removableWorktrees", health.removableWorktrees]);
+    }
+    if (health.staleWorktrees > 0) found.push(["staleWorktrees", health.staleWorktrees]);
   }
   return found;
 }

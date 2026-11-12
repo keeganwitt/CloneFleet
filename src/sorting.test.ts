@@ -16,6 +16,7 @@ const base: RepoSummary = {
   defaultBranch: "main",
   mainBranches: ["main"],
   defaultOverridden: false,
+  hasRemotes: true,
 };
 
 const repo = (

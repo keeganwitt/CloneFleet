@@ -1,9 +1,10 @@
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { recordAction, summarizeItems } from "../activityLog";
 import { api } from "../api";
 import {
   BRANCH_CATEGORIES,
   categorizeBranch,
+  formatAge,
   worktreeState,
   type BranchCategory,
 } from "../cleanup";
@@ -62,6 +63,10 @@ function errorMessage(error: unknown): string {
 export function CleanupView({ paths, onClose, onChanged, onOpenBranch }: Props) {
   const [fetchFirst, setFetchFirst] = useState(true);
   const [staleDays, setStaleDays] = useState(90);
+  const staleDaysRef = useRef(staleDays);
+  useEffect(() => {
+    staleDaysRef.current = staleDays;
+  }, [staleDays]);
   const [shown, setShown] = useState<ReadonlySet<BranchCategory>>(new Set(DEFAULT_CATEGORIES));
   const [reports, setReports] = useState<Record<string, RepoCleanup>>(() =>
     Object.fromEntries(paths.map((repo) => [repo, { status: "loading" }])),
@@ -88,7 +93,7 @@ export function CleanupView({ paths, onClose, onChanged, onOpenBranch }: Props) 
     setSelectedWorktrees((current) => {
       const next = new Set([...current].filter((k) => !ownKey(k)));
       report?.worktrees
-        .filter((w) => worktreeState(w).removable)
+        .filter((w) => worktreeState(w, currentUnixTime(), staleDaysRef.current).preselected)
         .forEach((w) => next.add(key(repo, w.path)));
       return next;
     });
@@ -114,7 +119,8 @@ export function CleanupView({ paths, onClose, onChanged, onOpenBranch }: Props) 
 
   const visibleBranchKeys = new Set<string>();
   const unmergedBranchKeys = new Set<string>();
-  const removableWorktreeKeys = new Set<string>();
+  const visibleWorktreeKeys = new Set<string>();
+  const unmergedWorktreeKeys = new Set<string>();
   for (const repo of paths) {
     const cleanup = reports[repo];
     if (cleanup?.status !== "loaded") continue;
@@ -125,7 +131,10 @@ export function CleanupView({ paths, onClose, onChanged, onOpenBranch }: Props) 
       if (category !== "merged") unmergedBranchKeys.add(key(repo, branch.name));
     }
     for (const worktree of cleanup.report.worktrees) {
-      if (worktreeState(worktree).removable) removableWorktreeKeys.add(key(repo, worktree.path));
+      const state = worktreeState(worktree, nowUnix, staleDays);
+      if (!state.selectable || !shown.has(state.category)) continue;
+      visibleWorktreeKeys.add(key(repo, worktree.path));
+      if (state.category !== "merged") unmergedWorktreeKeys.add(key(repo, worktree.path));
     }
   }
   const emptyRepos = new Set(
@@ -135,12 +144,15 @@ export function CleanupView({ paths, onClose, onChanged, onOpenBranch }: Props) 
       const hasBranches = cleanup.report.branches.some((branch) =>
         shown.has(categorizeBranch(branch, nowUnix, staleDays)),
       );
-      const hasWorktrees = cleanup.report.worktrees.some((w) => !w.isMain);
+      const hasWorktrees = cleanup.report.worktrees.some(
+        (w) => !w.isMain && shown.has(worktreeState(w, nowUnix, staleDays).category),
+      );
       return !hasBranches && !hasWorktrees && cleanup.report.warnings.length === 0;
     }),
   );
   const branchTargets = [...selectedBranches].filter((k) => visibleBranchKeys.has(k));
-  const worktreeTargets = [...selectedWorktrees].filter((k) => removableWorktreeKeys.has(k));
+  const worktreeTargets = [...selectedWorktrees].filter((k) => visibleWorktreeKeys.has(k));
+  const unmergedWorktreeTargets = worktreeTargets.filter((k) => unmergedWorktreeKeys.has(k));
   const unmergedTargets = branchTargets.filter((k) => unmergedBranchKeys.has(k));
 
   const toggle = (setter: typeof setSelectedBranches, itemKey: string) =>
@@ -202,10 +214,22 @@ export function CleanupView({ paths, onClose, onChanged, onOpenBranch }: Props) 
 
   const removeWorktrees = async () => {
     let message = `Remove ${plural(worktreeTargets.length, "worktree")}?`;
-    if (deleteWorktreeBranches) message += "\n\nTheir merged branches will also be deleted.";
+    if (deleteWorktreeBranches) message += "\n\nBranches of merged worktrees will also be deleted.";
+    if (unmergedWorktreeTargets.length > 0) {
+      message +=
+        `\n\n${unmergedWorktreeTargets.length} of them ${unmergedWorktreeTargets.length === 1 ? "isn't" : "aren't"} ` +
+        "merged. Their branches are kept, so no commits are lost.";
+    }
     if (!(await api.confirmDestructive(message, "Remove worktrees"))) return;
+    const unmerged = new Set(unmergedWorktreeTargets);
     await applyCleanup(worktreeTargets, async (repo, worktrees) => {
-      const result = await api.removeWorktrees(repo, worktrees, deleteWorktreeBranches);
+      const allowUnmerged = worktrees.some((w) => unmerged.has(key(repo, w)));
+      const result = await api.removeWorktrees(
+        repo,
+        worktrees,
+        deleteWorktreeBranches,
+        allowUnmerged,
+      );
       recordAction(repo, "Remove worktrees", summarizeItems(result.items), result.commands);
       return result.items;
     });
@@ -364,7 +388,10 @@ function RepoCleanupSection(props: SectionProps) {
     body = <p className="error">{cleanup.error}</p>;
   } else {
     const { report } = cleanup;
-    const worktrees = report.worktrees.filter((w) => !w.isMain);
+    const worktrees = report.worktrees
+      .filter((w) => !w.isMain)
+      .map((w) => [w, worktreeState(w, nowUnix, staleDays)] as const)
+      .filter(([, state]) => shown.has(state.category));
     body = (
       <>
         {report.warnings.map((warning) => (
@@ -389,12 +416,11 @@ function RepoCleanupSection(props: SectionProps) {
             <h4>Worktrees</h4>
             <table>
               <tbody>
-                {worktrees.map((worktree) => {
-                  const state = worktreeState(worktree);
+                {worktrees.map(([worktree, state]) => {
                   return (
                     <tr key={worktree.path}>
                       <td>
-                        {state.removable && (
+                        {state.selectable && (
                           <input
                             type="checkbox"
                             aria-label={`Select worktree ${worktree.path}`}
@@ -407,8 +433,10 @@ function RepoCleanupSection(props: SectionProps) {
                         <code>{worktree.path}</code>
                       </td>
                       <td>{worktree.branch ?? <span className="muted">(detached)</span>}</td>
-                      <td className={state.removable ? "category-merged" : "muted"}>
-                        {state.label}
+                      <td className={`category-${state.category}`}>{state.label}</td>
+                      <td className="muted">
+                        {worktree.lastCommitUnix !== null &&
+                          formatAge(nowUnix, worktree.lastCommitUnix)}
                       </td>
                     </tr>
                   );

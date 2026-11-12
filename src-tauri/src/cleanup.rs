@@ -99,6 +99,7 @@ async fn remove_one_worktree(
     context: &RepoContext,
     path: &PathBuf,
     delete_branch: bool,
+    allow_unmerged: bool,
 ) -> Result<Outcome, GitError> {
     let Some((index, worktree)) = context
         .worktrees
@@ -134,10 +135,14 @@ async fn remove_one_worktree(
         git.run_ok(&["worktree", "prune"]).await?;
         "Pruned missing worktree".to_string()
     } else {
-        if merged.is_none() {
+        if merged.is_none() && !(allow_unmerged && worktree.branch.is_some()) {
             return Ok(Outcome::skipped(
                 SkipReason::NotMerged,
-                "Worktree has unmerged commits",
+                if worktree.branch.is_some() {
+                    "Worktree has unmerged commits"
+                } else {
+                    "Worktree is detached with unmerged commits that only it holds"
+                },
             ));
         }
         if worktree_dirty(git, worktree).await? {
@@ -151,7 +156,10 @@ async fn remove_one_worktree(
         if !removed.success() {
             return Ok(Outcome::failed(failure_message(&removed)));
         }
-        "Removed worktree".to_string()
+        match (&merged, &worktree.branch) {
+            (None, Some(branch)) => format!("Removed worktree; kept unmerged branch {branch}"),
+            _ => "Removed worktree".to_string(),
+        }
     };
 
     if let (true, Some(_), Some(branch)) = (delete_branch, &merged, &worktree.branch) {
@@ -170,13 +178,15 @@ pub async fn remove_worktrees(
     mut git: Git,
     paths: &[PathBuf],
     delete_branches: bool,
+    allow_unmerged: bool,
 ) -> Result<CleanupResult, GitError> {
     let context = RepoContext::load(&mut git).await?;
     let mut items = Vec::with_capacity(paths.len());
     for path in paths {
-        let outcome = remove_one_worktree(&mut git, &context, path, delete_branches)
-            .await
-            .unwrap_or_else(|e| Outcome::failed(e.to_string()));
+        let outcome =
+            remove_one_worktree(&mut git, &context, path, delete_branches, allow_unmerged)
+                .await
+                .unwrap_or_else(|e| Outcome::failed(e.to_string()));
         items.push(ItemOutcome {
             item: path.to_string_lossy().into_owned(),
             outcome,
@@ -506,7 +516,7 @@ mod tests {
             listed_path(&report, "wt-open"),
             main.path.clone(),
         ];
-        let result = remove_worktrees(Git::new(&fixture.work), &paths, true)
+        let result = remove_worktrees(Git::new(&fixture.work), &paths, true, false)
             .await
             .unwrap();
         let outcomes: Vec<&Outcome> = result.items.iter().map(|i| &i.outcome).collect();
@@ -557,7 +567,7 @@ mod tests {
         assert!(report.worktrees[1].prunable);
         assert_eq!(report.worktrees[1].dirty, None);
 
-        let result = remove_worktrees(Git::new(&fixture.work), &[listed], false)
+        let result = remove_worktrees(Git::new(&fixture.work), &[listed], false, false)
             .await
             .unwrap();
         assert_eq!(
@@ -567,6 +577,69 @@ mod tests {
         let worktrees = fixture.git(&fixture.work, &["worktree", "list"]);
         assert!(!worktrees.contains("wt-done"), "{worktrees}");
         assert!(branch_exists(&fixture, "done"));
+    }
+
+    #[tokio::test]
+    async fn removes_unmerged_worktrees_only_when_allowed_and_keeps_their_branch() {
+        let fixture = Fixture::new();
+        feature_branch(&fixture, "open", "open.txt");
+        add_worktree(&fixture, "open");
+        let listed = listed_path(&report(&fixture).await, "wt-open");
+        let detached = fixture.root().join("wt-detached");
+        fixture.git(
+            &fixture.work,
+            &[
+                "worktree",
+                "add",
+                "--quiet",
+                "--detach",
+                detached.to_str().unwrap(),
+                "open",
+            ],
+        );
+        fixture.commit(
+            &detached,
+            "only-here.txt",
+            "x\n",
+            "commit only in the detached worktree",
+        );
+        let detached_listed = listed_path(&report(&fixture).await, "wt-detached");
+
+        let refused = remove_worktrees(
+            Git::new(&fixture.work),
+            std::slice::from_ref(&listed),
+            false,
+            false,
+        )
+        .await
+        .unwrap();
+        assert!(matches!(
+            refused.items[0].outcome,
+            Outcome::Skipped {
+                reason: SkipReason::NotMerged,
+                ..
+            }
+        ));
+
+        let result = remove_worktrees(
+            Git::new(&fixture.work),
+            &[listed, detached_listed],
+            true,
+            true,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            result.items[0].outcome,
+            Outcome::succeeded("Removed worktree; kept unmerged branch open")
+        );
+        assert!(matches!(
+            &result.items[1].outcome,
+            Outcome::Skipped { reason: SkipReason::NotMerged, message } if message.contains("detached")
+        ));
+        assert!(branch_exists(&fixture, "open"));
+        assert!(!fixture.root().join("wt-open").exists());
+        assert!(detached.exists());
     }
 
     #[tokio::test]
@@ -581,7 +654,7 @@ mod tests {
         fixture.git(&fixture.work, &["worktree", "lock", path.to_str().unwrap()]);
         let listed = listed_path(&report(&fixture).await, "wt-done");
 
-        let result = remove_worktrees(Git::new(&fixture.work), &[listed], true)
+        let result = remove_worktrees(Git::new(&fixture.work), &[listed], true, false)
             .await
             .unwrap();
         assert_eq!(

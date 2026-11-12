@@ -16,6 +16,7 @@ const clean: RepoSummary = {
   defaultBranch: "main",
   mainBranches: ["main"],
   defaultOverridden: false,
+  hasRemotes: true,
 };
 
 function repo(path: string, summary?: Partial<RepoSummary>): RepoState {

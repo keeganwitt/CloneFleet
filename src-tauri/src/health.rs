@@ -13,6 +13,7 @@ pub struct RepoHealth {
     pub remote_deleted_branches: u32,
     pub stale_branches: u32,
     pub removable_worktrees: u32,
+    pub stale_worktrees: u32,
     pub unpushed_branches: u32,
     pub stashes: u32,
     pub warnings: Vec<String>,
@@ -42,6 +43,12 @@ pub fn summarize_health(
             !w.is_main
                 && !w.locked
                 && (w.prunable || (w.merged.is_some() && w.dirty == Some(false)))
+        })),
+        stale_worktrees: count(branches.worktrees.iter().filter(|w| {
+            !w.is_main
+                && !w.prunable
+                && w.merged.is_none()
+                && w.last_commit_unix.is_some_and(|t| t <= stale_before)
         })),
         unpushed_branches: count(unpushed.branches.iter().filter(|b| b.merged.is_none())),
         stashes: count(unpushed.stashes.iter()),
@@ -98,6 +105,7 @@ mod tests {
                 remote_deleted_branches: 1,
                 stale_branches: 0,
                 removable_worktrees: 0,
+                stale_worktrees: 0,
                 unpushed_branches: 2,
                 stashes: 1,
                 warnings: vec![],

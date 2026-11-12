@@ -21,6 +21,7 @@ const summary: RepoSummary = {
   defaultBranch: "main",
   mainBranches: ["main"],
   defaultOverridden: false,
+  hasRemotes: true,
 };
 
 const branch = (name: string, overrides: Partial<BranchInfo> = {}): BranchInfo => ({

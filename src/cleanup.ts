@@ -76,17 +76,51 @@ export function formatAge(nowUnix: number, thenUnix: number): string {
   return `${Math.floor(days / 365)}y ago`;
 }
 
-export type WorktreeState =
-  { removable: true; label: string } | { removable: false; label: string };
+export interface WorktreeState {
+  category: BranchCategory;
+  selectable: boolean;
+  preselected: boolean;
+  label: string;
+}
 
-export function worktreeState(worktree: WorktreeInfo): WorktreeState {
-  if (worktree.isMain) return { removable: false, label: "Main worktree" };
-  if (worktree.locked) return { removable: false, label: "Locked" };
-  if (worktree.prunable) return { removable: true, label: "Directory missing; can be pruned" };
-  if (!worktree.merged) return { removable: false, label: "Has unmerged commits" };
-  if (worktree.dirty) return { removable: false, label: "Has uncommitted or untracked files" };
+export function worktreeState(
+  worktree: WorktreeInfo,
+  nowUnix: number,
+  staleDays: number,
+): WorktreeState {
+  const blocked = (label: string): WorktreeState => ({
+    category: "protected",
+    selectable: false,
+    preselected: false,
+    label,
+  });
+  if (worktree.isMain) return blocked("Main worktree");
+  if (worktree.locked) return blocked("Locked");
+  if (worktree.prunable) {
+    return {
+      category: "merged",
+      selectable: true,
+      preselected: true,
+      label: "Directory missing; can be pruned",
+    };
+  }
+  if (worktree.dirty) return blocked("Has uncommitted or untracked files");
+  if (worktree.merged) {
+    return {
+      category: "merged",
+      selectable: true,
+      preselected: true,
+      label: `${capitalize(EVIDENCE_LABELS[worktree.merged.evidence])} ${worktree.merged.base}`,
+    };
+  }
+  if (!worktree.branch) return blocked("Detached with commits only this worktree holds");
+  const stale =
+    worktree.lastCommitUnix !== null &&
+    nowUnix - worktree.lastCommitUnix >= staleDays * DAY_SECONDS;
   return {
-    removable: true,
-    label: `${capitalize(EVIDENCE_LABELS[worktree.merged.evidence])} ${worktree.merged.base}`,
+    category: stale ? "stale" : "active",
+    selectable: true,
+    preselected: false,
+    label: `Not merged; removing it keeps ${worktree.branch}`,
   };
 }

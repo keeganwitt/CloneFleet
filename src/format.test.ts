@@ -15,6 +15,7 @@ const clean: RepoSummary = {
   defaultBranch: "main",
   mainBranches: ["main"],
   defaultOverridden: false,
+  hasRemotes: true,
 };
 
 describe("basename", () => {

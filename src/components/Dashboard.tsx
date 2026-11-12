@@ -126,21 +126,33 @@ export function Dashboard(props: Props) {
           </div>
         );
       })}
-
       {overview.healthy.length > 0 && (
-        <p className="healthy">
-          <span className="outcome-succeeded">
-            ✓ {overview.healthy.length}{" "}
-            {overview.healthy.length === 1 ? "repository is" : "repositories are"} up to date and
-            clean
-          </span>
-          <button
-            className="link"
-            onClick={() => props.onShow("Up to date and clean", overview.healthy)}
-          >
-            Show
-          </button>
-        </p>
+        <div className="dashboard-section">
+          <h3>Up to date</h3>
+          <ul className="cards" aria-label="Up to date">
+            <li
+              className="card card-success"
+              aria-label={`${overview.healthy.length} up to date and clean`}
+            >
+              <div className="card-text">
+                <strong>
+                  {overview.healthy.length}{" "}
+                  {overview.healthy.length === 1 ? "repository is" : "repositories are"} up to date
+                  and clean
+                </strong>
+                <RepoNames paths={overview.healthy} />
+              </div>
+              <div className="card-actions">
+                <button
+                  className="link"
+                  onClick={() => props.onShow("Up to date and clean", overview.healthy)}
+                >
+                  Show
+                </button>
+              </div>
+            </li>
+          </ul>
+        </div>
       )}
       {overview.cards.length === 0 && overview.healthy.length === props.paths.length && (
         <p className="empty muted">Everything is up to date. Nothing needs attention.</p>

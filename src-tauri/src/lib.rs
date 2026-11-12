@@ -3,6 +3,7 @@ mod app_settings;
 mod branches;
 mod changes;
 mod cleanup;
+pub mod demo;
 mod diff;
 mod discovery;
 mod fork;
@@ -371,11 +372,12 @@ async fn remove_worktrees(
     path: PathBuf,
     worktrees: Vec<PathBuf>,
     delete_branches: bool,
+    allow_unmerged: bool,
     state: State<'_, AppState>,
 ) -> Result<CleanupResult, String> {
     let git = state.git(&path)?;
     let _permit = state.permits.acquire().await.map_err(|e| e.to_string())?;
-    cleanup::remove_worktrees(git, &worktrees, delete_branches)
+    cleanup::remove_worktrees(git, &worktrees, delete_branches, allow_unmerged)
         .await
         .map_err(|e| e.to_string())
 }
@@ -520,7 +522,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let config_path = app.path().app_config_dir()?.join("config.json");
+            let config_dir = match std::env::var_os("CLONEFLEET_CONFIG_DIR") {
+                Some(dir) => PathBuf::from(dir),
+                None => app.path().app_config_dir()?,
+            };
+            let config_path = config_dir.join("config.json");
             app.manage(AppState::new(config_path)?);
             Ok(())
         })

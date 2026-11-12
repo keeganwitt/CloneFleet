@@ -15,6 +15,7 @@ const summary: RepoSummary = {
   defaultBranch: "main",
   mainBranches: ["main"],
   defaultOverridden: false,
+  hasRemotes: true,
 };
 
 const result: ActionResult = {

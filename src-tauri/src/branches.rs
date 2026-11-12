@@ -79,6 +79,7 @@ pub struct WorktreeInfo {
     pub prunable: bool,
     pub dirty: Option<bool>,
     pub merged: Option<Merged>,
+    pub last_commit_unix: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -459,6 +460,16 @@ pub async fn analyze(git: &mut Git, fetch: bool) -> Result<BranchReport, GitErro
             (false, None, Some(head)) => merge_evidence(git, head, &context.bases).await?,
             (false, None, None) => None,
         };
+        let last_commit_unix = match &raw.head {
+            Some(head) if !raw.prunable => git
+                .run(&["log", "-1", "--format=%ct", head])
+                .await?
+                .stdout
+                .trim()
+                .parse()
+                .ok(),
+            _ => None,
+        };
         worktrees.push(WorktreeInfo {
             path: raw.path.clone(),
             head: raw.head.clone(),
@@ -468,6 +479,7 @@ pub async fn analyze(git: &mut Git, fetch: bool) -> Result<BranchReport, GitErro
             prunable: raw.prunable,
             dirty,
             merged,
+            last_commit_unix,
         });
     }
 

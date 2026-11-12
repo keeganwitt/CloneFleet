@@ -18,6 +18,7 @@ const clean: RepoSummary = {
   defaultBranch: "main",
   mainBranches: ["main"],
   defaultOverridden: false,
+  hasRemotes: true,
 };
 
 const noHealth: RepoHealth = {
@@ -25,6 +26,7 @@ const noHealth: RepoHealth = {
   remoteDeletedBranches: 0,
   staleBranches: 0,
   removableWorktrees: 0,
+  staleWorktrees: 0,
   unpushedBranches: 0,
   stashes: 0,
   warnings: [],
@@ -120,7 +122,11 @@ describe("Dashboard", () => {
     expect(
       within(housekeeping).getByLabelText("3 branches merged in 2 repositories"),
     ).toBeInTheDocument();
-    expect(region).toHaveTextContent("✓ 1 repository is up to date and clean");
+    expect(
+      within(within(region).getByRole("list", { name: "Up to date" })).getByLabelText(
+        "1 up to date and clean",
+      ),
+    ).toHaveTextContent("1 repository is up to date and cleanlib");
   });
 
   it("pulls every repository on the behind card and rechecks them", async () => {

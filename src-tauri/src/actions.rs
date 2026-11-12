@@ -159,10 +159,12 @@ pub struct RepoSummary {
     pub default_branch: Option<String>,
     pub main_branches: Vec<String>,
     pub default_overridden: bool,
+    pub has_remotes: bool,
 }
 
 pub async fn summarize(git: &mut Git) -> Result<RepoSummary, GitError> {
     let status = repo_status(git).await?;
+    let has_remotes = !git.run_ok(&["remote"]).await?.trim().is_empty();
     let default_branch = default_branch(git).await?.map(|b| b.name);
     let settings = git.branch_settings();
     let main_branches = match &default_branch {
@@ -174,6 +176,7 @@ pub async fn summarize(git: &mut Git) -> Result<RepoSummary, GitError> {
         default_overridden: !settings.is_empty(),
         default_branch,
         main_branches,
+        has_remotes,
     })
 }
 
@@ -421,6 +424,8 @@ mod tests {
         );
         let never = summarize(&mut Git::new(&local)).await.unwrap();
         assert_eq!(never.status.last_fetch_unix, None);
+        assert!(!never.has_remotes);
+        assert!(cloned.has_remotes);
 
         fixture.git(&fixture.work, &["fetch", "--quiet"]);
         let now = std::time::SystemTime::now()

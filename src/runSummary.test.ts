@@ -43,7 +43,19 @@ describe("fleetFreshness", () => {
   const withFetch = (path: string, lastFetchUnix: number | null): RepoState => ({
     path,
     loadingSummary: false,
-    summary: { lastFetchUnix } as RepoSummary,
+    summary: { lastFetchUnix, hasRemotes: true } as RepoSummary,
+  });
+
+  it("ignores repositories without remotes", () => {
+    const local: RepoState = {
+      path: "/local",
+      loadingSummary: false,
+      summary: { lastFetchUnix: null, hasRemotes: false } as RepoSummary,
+    };
+    expect(fleetFreshness(["/local"], { "/local": local })).toEqual({
+      oldestFetchUnix: null,
+      neverFetched: 0,
+    });
   });
 
   it("finds the oldest fetch and counts repositories never fetched", () => {

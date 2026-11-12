@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { api } from "./api";
 import { formatRecent } from "./cleanup";
-import { ActionBar } from "./components/ActionBar";
+import { AboutDialog } from "./components/AboutDialog";
+import { ActionPanel, SelectionLine } from "./components/ActionBar";
 import { ActivityView } from "./components/ActivityView";
 import { CleanupView } from "./components/CleanupView";
 import { Dashboard } from "./components/Dashboard";
@@ -50,6 +51,7 @@ function App() {
   const nowUnix = useNow();
   const [page, setPage] = useState<Page>({ kind: "overview" });
   const [showSettings, setShowSettings] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [pathFilter, setPathFilter] = useState<{ label: string; paths: string[] }>();
   const [resultFilter, setResultFilter] = useState<RunStatus>();
@@ -157,7 +159,6 @@ function App() {
   return (
     <main>
       <header className="toolbar">
-        <h1>CloneFleet</h1>
         <button onClick={manager.openDirectories}>Open directory…</button>
         <button onClick={manager.addDirectories}>Add directory…</button>
         {manager.workspace.recent.length > 0 && (
@@ -187,6 +188,9 @@ function App() {
           </select>
         )}
         <span className="spacer" />
+        <button className="link" onClick={() => setShowAbout(true)}>
+          About
+        </button>
         <button disabled={!settings.view} onClick={() => setShowSettings(true)}>
           Settings
         </button>
@@ -391,16 +395,15 @@ function App() {
                   </span>
                 </div>
 
-                <ActionBar
+                <SelectionLine
                   selected={targets.length}
+
                   visible={visible.length}
+
                   hiddenSelected={hiddenSelected}
-                  busy={busy}
-                  onRun={(action) => runOn(targets, action)}
-                  onReview={(kind) => setPage({ kind, paths: targets })}
-                  onRefresh={() => changed(targets)}
-                  onRemove={() => manager.removeRepos(targets)}
+
                   onSelectAll={() => manager.setSelection(visible, true)}
+
                   onClear={() => manager.setSelection([...state.selected], false)}
                 />
 
@@ -451,12 +454,29 @@ function App() {
                 {visible.length === 0 && (
                   <p className="empty muted">No repositories match the current filters.</p>
                 )}
+
+                <ActionPanel
+                  selected={targets.length}
+
+                  hiddenSelected={hiddenSelected}
+
+                  busy={busy}
+
+                  onRun={(action) => runOn(targets, action)}
+
+                  onReview={(kind) => setPage({ kind, paths: targets })}
+
+                  onRefresh={() => changed(targets)}
+
+                  onRemove={() => manager.removeRepos(targets)}
+                />
               </>
             )}
           </div>
         </div>
       )}
 
+      {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
       {showSettings && settings.view && (
         <SettingsDialog
           view={settings.view}

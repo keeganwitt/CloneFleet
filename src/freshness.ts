@@ -10,7 +10,7 @@ export function fleetFreshness(paths: string[], repos: Record<string, RepoState>
   let neverFetched = 0;
   for (const path of paths) {
     const summary = repos[path]?.summary;
-    if (!summary) continue;
+    if (!summary?.hasRemotes) continue;
     if (summary.lastFetchUnix === null) {
       neverFetched += 1;
     } else if (oldestFetchUnix === null || summary.lastFetchUnix < oldestFetchUnix) {

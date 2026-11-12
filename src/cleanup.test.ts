@@ -29,6 +29,7 @@ const worktree = (overrides: Partial<WorktreeInfo>): WorktreeInfo => ({
   prunable: false,
   dirty: false,
   merged: { evidence: "ancestor", base: "origin/main" },
+  lastCommitUnix: NOW - DAY,
   ...overrides,
 });
 
@@ -77,19 +78,36 @@ describe("formatAge", () => {
 });
 
 describe("worktreeState", () => {
-  it("only allows clean merged worktrees or missing directories", () => {
-    expect(worktreeState(worktree({})).removable).toBe(true);
-    expect(worktreeState(worktree({ prunable: true, merged: null, dirty: null })).removable).toBe(
-      true,
-    );
-    expect(worktreeState(worktree({ isMain: true }))).toEqual({
-      removable: false,
-      label: "Main worktree",
+  const state = (overrides: Partial<WorktreeInfo>) => worktreeState(worktree(overrides), NOW, 90);
+
+  it("preselects merged and missing worktrees", () => {
+    expect(state({})).toMatchObject({ category: "merged", selectable: true, preselected: true });
+    expect(state({ prunable: true, merged: null, dirty: null })).toMatchObject({
+      category: "merged",
+      preselected: true,
+      label: "Directory missing; can be pruned",
     });
-    expect(worktreeState(worktree({ locked: true })).removable).toBe(false);
-    expect(worktreeState(worktree({ merged: null })).label).toBe("Has unmerged commits");
-    expect(worktreeState(worktree({ dirty: true })).label).toBe(
-      "Has uncommitted or untracked files",
-    );
+  });
+
+  it("offers unmerged worktrees as stale or active candidates that keep their branch", () => {
+    expect(state({ merged: null, lastCommitUnix: NOW - 200 * DAY })).toEqual({
+      category: "stale",
+      selectable: true,
+      preselected: false,
+      label: "Not merged; removing it keeps feature",
+    });
+    expect(state({ merged: null })).toMatchObject({ category: "active", selectable: true });
+  });
+
+  it("never offers the main, locked, dirty, or detached unmerged worktrees", () => {
+    for (const overrides of [
+      { isMain: true },
+      { locked: true },
+      { dirty: true },
+      { merged: null, branch: null },
+    ]) {
+      expect(state(overrides)).toMatchObject({ category: "protected", selectable: false });
+    }
+    expect(state({ dirty: true }).label).toBe("Has uncommitted or untracked files");
   });
 });

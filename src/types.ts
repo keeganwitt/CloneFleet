@@ -13,6 +13,7 @@ export interface RepoSummary {
   defaultBranch: string | null;
   mainBranches: string[];
   defaultOverridden: boolean;
+  hasRemotes: boolean;
 }
 
 export type Action =
@@ -109,6 +110,7 @@ export interface WorktreeInfo {
   prunable: boolean;
   dirty: boolean | null;
   merged: Merged | null;
+  lastCommitUnix: number | null;
 }
 
 export interface BranchReport {
@@ -251,6 +253,7 @@ export interface RepoHealth {
   remoteDeletedBranches: number;
   staleBranches: number;
   removableWorktrees: number;
+  staleWorktrees: number;
   unpushedBranches: number;
   stashes: number;
   warnings: string[];

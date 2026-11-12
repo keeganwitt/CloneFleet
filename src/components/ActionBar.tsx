@@ -1,16 +1,55 @@
 import type { Action } from "../types";
 
-interface Props {
+interface SelectionProps {
   selected: number;
   visible: number;
+  hiddenSelected: number;
+  onSelectAll: () => void;
+  onClear: () => void;
+}
+
+export function SelectionLine({
+  selected,
+  visible,
+  hiddenSelected,
+  onSelectAll,
+  onClear,
+}: SelectionProps) {
+  return (
+    <div className="toolbar selection-line">
+      {selected === 0 ? (
+        <span className="muted">
+          Select repositories to act on them
+          {hiddenSelected > 0 && ` (${hiddenSelected} selected but hidden by filters)`}
+        </span>
+      ) : (
+        <>
+          <strong>{selected} selected</strong>
+          {hiddenSelected > 0 && (
+            <span className="muted">({hiddenSelected} more hidden by filters)</span>
+          )}
+          <button className="link" onClick={onClear}>
+            Clear
+          </button>
+        </>
+      )}
+      {visible > selected && (
+        <button className="link" onClick={onSelectAll}>
+          Select all {visible}
+        </button>
+      )}
+    </div>
+  );
+}
+
+interface PanelProps {
+  selected: number;
   hiddenSelected: number;
   busy: boolean;
   onRun: (action: Action) => void;
   onReview: (kind: "cleanup" | "unpushed") => void;
   onRefresh: () => void;
   onRemove: () => void;
-  onSelectAll: () => void;
-  onClear: () => void;
 }
 
 const UPDATE_ACTIONS: [Action, string][] = [
@@ -21,32 +60,15 @@ const UPDATE_ACTIONS: [Action, string][] = [
   [{ type: "syncDefaultBranch" }, "Check default branch"],
 ];
 
-export function ActionBar(props: Props) {
-  if (props.selected === 0) {
-    return (
-      <div className="toolbar action-bar">
-        <span className="muted">
-          Select repositories to act on them
-          {props.hiddenSelected > 0 && ` (${props.hiddenSelected} selected but hidden by filters)`}
-        </span>
-        {props.visible > 0 && (
-          <button className="link" onClick={props.onSelectAll}>
-            Select all {props.visible}
-          </button>
-        )}
-      </div>
-    );
-  }
+export function ActionPanel(props: PanelProps) {
+  if (props.selected === 0) return null;
   return (
-    <div className="action-bar action-bar-active" role="region" aria-label="Selection actions">
+    <div className="action-bar-active" role="region" aria-label="Selection actions">
       <div className="toolbar">
         <strong>{props.selected} selected</strong>
         {props.hiddenSelected > 0 && (
           <span className="muted">({props.hiddenSelected} more hidden by filters)</span>
         )}
-        <button className="link" onClick={props.onClear}>
-          Clear
-        </button>
         <span className="spacer" />
         <button onClick={props.onRefresh}>Refresh status</button>
         <button disabled={props.busy} onClick={props.onRemove}>

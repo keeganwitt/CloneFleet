@@ -134,13 +134,17 @@ export function RepoRow({
           {summary && (
             <>
               {describeSync(summary)}
-              <div
-                className={`muted fetched${isStale(nowUnix, summary.lastFetchUnix) ? " stale" : ""}`}
-              >
-                {summary.lastFetchUnix === null
-                  ? "never fetched"
-                  : `fetched ${formatRecent(nowUnix, summary.lastFetchUnix)}`}
-              </div>
+              {summary.hasRemotes ? (
+                <div
+                  className={`muted fetched${isStale(nowUnix, summary.lastFetchUnix) ? " stale" : ""}`}
+                >
+                  {summary.lastFetchUnix === null
+                    ? "never fetched"
+                    : `fetched ${formatRecent(nowUnix, summary.lastFetchUnix)}`}
+                </div>
+              ) : (
+                <div className="muted">no remote</div>
+              )}
             </>
           )}
         </td>

@@ -47,8 +47,13 @@ export const api = {
     invoke<BranchReport>("analyze_branches", { path, fetch }),
   deleteBranches: (path: string, branches: string[], allowUnmerged: boolean) =>
     invoke<CleanupResult>("delete_branches", { path, branches, allowUnmerged }),
-  removeWorktrees: (path: string, worktrees: string[], deleteBranches: boolean) =>
-    invoke<CleanupResult>("remove_worktrees", { path, worktrees, deleteBranches }),
+  removeWorktrees: (
+    path: string,
+    worktrees: string[],
+    deleteBranches: boolean,
+    allowUnmerged: boolean,
+  ) =>
+    invoke<CleanupResult>("remove_worktrees", { path, worktrees, deleteBranches, allowUnmerged }),
   analyzeUnpushed: (path: string, fetch: boolean) =>
     invoke<UnpushedReport>("analyze_unpushed", { path, fetch }),
   dropStashes: (path: string, stashes: string[]) =>

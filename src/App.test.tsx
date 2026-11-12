@@ -18,6 +18,7 @@ const summary: RepoSummary = {
   defaultBranch: "main",
   mainBranches: ["main"],
   defaultOverridden: false,
+  hasRemotes: true,
 };
 
 interface Backend {
@@ -77,6 +78,7 @@ function mockBackend(backend: Backend) {
           remoteDeletedBranches: 0,
           staleBranches: 0,
           removableWorktrees: 0,
+          staleWorktrees: 0,
           unpushedBranches: 0,
           stashes: 0,
           warnings: [],

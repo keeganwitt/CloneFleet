@@ -48,6 +48,7 @@ const report: BranchReport = {
       prunable: false,
       dirty: false,
       merged: null,
+      lastCommitUnix: null,
     },
     {
       path: "/wt/done",
@@ -58,6 +59,7 @@ const report: BranchReport = {
       prunable: false,
       dirty: false,
       merged: { evidence: "ancestor", base: "origin/main" },
+      lastCommitUnix: now - DAY,
     },
     {
       path: "/wt/busy",
@@ -68,6 +70,7 @@ const report: BranchReport = {
       prunable: false,
       dirty: true,
       merged: { evidence: "ancestor", base: "origin/main" },
+      lastCommitUnix: now - DAY,
     },
   ],
   warnings: ["Could not fetch upstream: offline"],
@@ -133,8 +136,10 @@ describe("CleanupView", () => {
     expect(screen.queryByText("fresh")).not.toBeInTheDocument();
     expect(screen.queryByText("main")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Select worktree /wt/done")).toBeChecked();
-    expect(screen.queryByLabelText("Select worktree /wt/busy")).not.toBeInTheDocument();
+    expect(screen.queryByText("/wt/busy")).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByLabelText("Protected"));
     expect(screen.getByText("Has uncommitted or untracked files")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Select worktree /wt/busy")).not.toBeInTheDocument();
   });
 
   it("hides repositories with nothing to clean up unless asked", async () => {
@@ -224,6 +229,50 @@ describe("CleanupView", () => {
     expect(screen.queryByText("ancient")).not.toBeInTheDocument();
   });
 
+  it("offers stale unmerged worktrees and keeps their branches", async () => {
+    const user = userEvent.setup();
+    const calls: { cmd: string; args: Record<string, unknown> }[] = [];
+    mockIPC((cmd, payload) => {
+      const args = (payload ?? {}) as Record<string, unknown>;
+      calls.push({ cmd, args });
+      if (cmd === "analyze_branches") {
+        return {
+          ...report,
+          worktrees: [
+            report.worktrees[0],
+            {
+              ...report.worktrees[1],
+              path: "/wt/old",
+              branch: "experiment",
+              merged: null,
+              lastCommitUnix: now - 200 * DAY,
+            },
+          ],
+        };
+      }
+      if (cmd === "plugin:dialog|message") return "Remove worktrees";
+      if (cmd === "remove_worktrees") return { items: [], commands: [] };
+      throw new Error(`unexpected ${cmd}`);
+    });
+    renderView();
+    const checkbox = await screen.findByLabelText("Select worktree /wt/old");
+    expect(checkbox).not.toBeChecked();
+    expect(screen.getByText("Not merged; removing it keeps experiment")).toHaveClass(
+      "category-stale",
+    );
+    expect(screen.getByText("6mo ago")).toBeInTheDocument();
+    await user.click(checkbox);
+    await user.click(screen.getByRole("button", { name: "Remove 1 worktree" }));
+
+    await waitFor(() => expect(calls.some((c) => c.cmd === "remove_worktrees")).toBe(true));
+    const dialog = calls.find((c) => c.cmd === "plugin:dialog|message")!;
+    expect(dialog.args.message).toContain("Their branches are kept, so no commits are lost.");
+    expect(calls.find((c) => c.cmd === "remove_worktrees")?.args).toMatchObject({
+      worktrees: ["/wt/old"],
+      allowUnmerged: true,
+    });
+  });
+
   it("removes worktrees and optionally their branches", async () => {
     const user = userEvent.setup();
     const calls = mockBackend();
@@ -233,7 +282,7 @@ describe("CleanupView", () => {
 
     expect(await screen.findByText("/wt/done: Removed worktree")).toBeInTheDocument();
     expect(called(calls, "remove_worktrees")).toEqual([
-      { path: "/repo", worktrees: ["/wt/done"], deleteBranches: false },
+      { path: "/repo", worktrees: ["/wt/done"], deleteBranches: false, allowUnmerged: false },
     ]);
   });
 });

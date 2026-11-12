@@ -396,12 +396,21 @@ input.days {
   flex: 1;
 }
 
+.selection-line {
+  min-height: 28px;
+}
+
+/* Sticky at the bottom so showing it never shifts the rows being clicked. */
 .action-bar-active {
+  position: sticky;
+  bottom: 12px;
+  z-index: 5;
+  margin-top: 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px 0;
-  margin-bottom: 12px;
-  background: var(--selected);
+  background: color-mix(in srgb, var(--selected) 60%, var(--background));
+  box-shadow: 0 6px 24px rgb(0 0 0 / 18%);
 }
 
 .run-summary-items {
@@ -661,6 +670,10 @@ input.days {
   border-left-color: var(--warning);
 }
 
+.card-success {
+  border-left-color: var(--success);
+}
+
 .card-neutral {
   border-left-color: var(--border);
 }
@@ -772,4 +785,8 @@ h3 .repo-path {
 .modal {
   max-height: 90vh;
   overflow: auto;
+}
+
+.sidebar button[aria-current="page"]:focus {
+  outline: none;
 }

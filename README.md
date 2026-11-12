@@ -4,6 +4,8 @@
 
 Your fleet of Git clones, under one command. A cross-platform desktop app to keep your repositories in sync, clean up branches and worktrees, and tackle routine maintenance across your fleet at once.
 
+![The CloneFleet overview: repositories grouped by what needs attention, each group with a one-click fix](docs/screenshots/overview.png)
+
 ## Features
 
 - **Overview dashboard** as the home screen: repositories grouped by what needs doing (stopped mid-operation, diverged, unpushed commits, behind upstream, not on the default branch, uncommitted changes, stashes, merged or stale branches, removable worktrees), each with a one-click fix or a link to the filtered repository list. A background check of branches and unpushed work runs when directories load and after actions; fetching stays manual.
@@ -30,7 +32,18 @@ Your fleet of Git clones, under one command. A cross-platform desktop app to kee
   - Shows branches as a tree grouped by `/`, with folder-level selection.
   - Compares against `upstream/<default>` when an `upstream` remote exists, so fork branches merged upstream are recognized.
 - **Unpushed work and stashes**: per repository, lists branches with commits that exist on no remote (noting ones whose changes were already merged), uncommitted changes in any worktree, and stashes, which can be dropped after confirmation.
-- **Worktree cleanup:** removes clean worktrees whose branch is merged, optionally deleting the branch, and prunes worktrees whose directory no longer exists.
+- **Worktree cleanup** works like branch cleanup: clean worktrees whose branch is merged are preselected (optionally deleting the branch), worktrees whose directory is gone are pruned, and stale or active unmerged worktrees can be removed while keeping their branch, so no commits are lost.
+
+## Screenshots
+
+|                                                                                                                     |                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| ![Repositories list with three selected and the action bar pinned to the bottom](docs/screenshots/repositories.png) | ![Branch and worktree cleanup with merged, squash-merged, remote-deleted, and stale branches in a tree](docs/screenshots/cleanup.png) |
+| **Repositories**: filter, sort, select, and run an action on many repositories at once.                             | **Branch & worktree cleanup**: merged branches are found even after squash and rebase merges.                                         |
+| ![A branch's commits and diff in the repository details panel](docs/screenshots/branch-diff.png)                    | ![Remotes page with each remote checked and a bulk URL editor](docs/screenshots/remotes.png)                                          |
+| **Branch details**: see what an unmerged branch contains before deleting it.                                        | **Remotes**: check every remote, fix moved ones, and rewrite URLs in bulk.                                                            |
+
+The screenshots use the made-up repositories from `pnpm demo`; see [docs/demo.md](docs/demo.md).
 
 ## Safety rules
 
@@ -61,6 +74,8 @@ pnpm tauri dev
 | Lint             | `pnpm lint` and `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets` |
 | Format           | `pnpm format` and `cargo fmt --manifest-path src-tauri/Cargo.toml`                |
 | Production build | `pnpm tauri build`                                                                |
+
+`pnpm demo` starts the app on a set of made-up repositories that show every state CloneFleet handles, without touching your real repositories or settings. See [docs/demo.md](docs/demo.md).
 
 Rust tests create temporary repositories with local bare remotes, so they need `git` but no network access. Tauri requires the `dist` directory to exist at compile time, so run `pnpm build` once before running Rust tests or clippy on a fresh clone.
 

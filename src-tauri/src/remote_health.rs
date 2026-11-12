@@ -31,35 +31,41 @@ pub struct RemoteCheck {
     pub message: Option<String>,
 }
 
-pub fn parse_remote_verbose(output: &str) -> Vec<RemoteInfo> {
+pub fn parse_remote_config(output: &str) -> Vec<RemoteInfo> {
     let mut remotes: Vec<RemoteInfo> = Vec::new();
     for line in output.lines() {
-        let mut fields = line.split_whitespace();
-        let (Some(name), Some(url), Some(kind)) = (fields.next(), fields.next(), fields.next())
-        else {
+        let Some((key, url)) = line.split_once(' ') else {
             continue;
         };
-        let existing = remotes.iter().position(|r| r.name == name);
-        let index = existing.unwrap_or_else(|| {
-            remotes.push(RemoteInfo {
-                name: name.to_string(),
-                fetch_url: String::new(),
-                push_url: None,
-            });
-            remotes.len() - 1
-        });
+        let Some(rest) = key.strip_prefix("remote.") else {
+            continue;
+        };
+        let (name, kind) = if let Some(name) = rest.strip_suffix(".pushurl") {
+            (name, "pushurl")
+        } else if let Some(name) = rest.strip_suffix(".url") {
+            (name, "url")
+        } else {
+            continue;
+        };
+        let index = match remotes.iter().position(|r| r.name == name) {
+            Some(index) => index,
+            None => {
+                remotes.push(RemoteInfo {
+                    name: name.to_string(),
+                    fetch_url: String::new(),
+                    push_url: None,
+                });
+                remotes.len() - 1
+            }
+        };
         let remote = &mut remotes[index];
-        match kind {
-            "(fetch)" => remote.fetch_url = url.to_string(),
-            "(push)" => remote.push_url = Some(url.to_string()),
-            _ => {}
+        if kind == "url" && remote.fetch_url.is_empty() {
+            remote.fetch_url = url.to_string();
+        } else if kind == "pushurl" && remote.push_url.is_none() {
+            remote.push_url = Some(url.to_string());
         }
     }
-    for remote in &mut remotes {
-        if remote.push_url.as_deref() == Some(remote.fetch_url.as_str()) {
-            remote.push_url = None;
-        }
-    }
+    remotes.sort_by(|a, b| a.name.cmp(&b.name));
     remotes
 }
 
@@ -70,8 +76,18 @@ pub fn parse_redirect(stderr: &str) -> Option<String> {
     })
 }
 
+// Reads configured URLs rather than `git remote -v`, which shows them after `insteadOf` rewrites.
 pub async fn list_remotes(git: &mut Git) -> Result<Vec<RemoteInfo>, GitError> {
-    Ok(parse_remote_verbose(&git.run_ok(&["remote", "-v"]).await?))
+    let record = git
+        .run(&["config", "--get-regexp", r"^remote\..*\.(url|pushurl)$"])
+        .await?;
+    if !record.success() && record.exit_code != Some(1) {
+        return Err(GitError::Failed {
+            args: "config --get-regexp remote".into(),
+            message: failure_message(&record),
+        });
+    }
+    Ok(parse_remote_config(&record.stdout))
 }
 
 pub async fn check_remotes(git: &mut Git) -> Result<Vec<RemoteCheck>, GitError> {
@@ -155,16 +171,21 @@ mod tests {
     use crate::test_support::Fixture;
 
     #[test]
-    fn parses_remote_verbose_output() {
+    fn parses_configured_remote_urls() {
         let output = "\
-origin\tgit@github.com:me/fork.git (fetch)
-origin\tgit@github.com:me/fork.git (push)
-upstream\thttps://github.com/org/repo.git (fetch)
-upstream\tno_push (push)
+remote.upstream.url https://github.com/org/repo.git
+remote.origin.url git@github.com:me/fork.git
+remote.upstream.pushurl no_push
+remote.my.dotted.remote.url /srv/x.git
 ";
         assert_eq!(
-            parse_remote_verbose(output),
+            parse_remote_config(output),
             vec![
+                RemoteInfo {
+                    name: "my.dotted.remote".into(),
+                    fetch_url: "/srv/x.git".into(),
+                    push_url: None,
+                },
                 RemoteInfo {
                     name: "origin".into(),
                     fetch_url: "git@github.com:me/fork.git".into(),
@@ -176,6 +197,43 @@ upstream\tno_push (push)
                     push_url: Some("no_push".into()),
                 },
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn lists_configured_urls_even_when_rewritten() {
+        let fixture = Fixture::new();
+        let remote_dir = format!("{}/", fixture.root().display());
+        let rewrite = format!("url.{remote_dir}.insteadOf");
+        fixture.git(
+            &fixture.work,
+            &["config", &rewrite, "https://github.com/acme/"],
+        );
+        fixture.git(
+            &fixture.work,
+            &[
+                "remote",
+                "set-url",
+                "origin",
+                "https://github.com/acme/remote.git",
+            ],
+        );
+
+        let remotes = list_remotes(&mut Git::new(&fixture.work)).await.unwrap();
+        assert_eq!(remotes[0].fetch_url, "https://github.com/acme/remote.git");
+        let checks = check_remotes(&mut Git::new(&fixture.work)).await.unwrap();
+        assert_eq!(checks[0].status, RemoteStatus::Ok);
+    }
+
+    #[tokio::test]
+    async fn lists_nothing_for_repositories_without_remotes() {
+        let fixture = Fixture::new();
+        fixture.git(&fixture.work, &["remote", "remove", "origin"]);
+        assert!(
+            list_remotes(&mut Git::new(&fixture.work))
+                .await
+                .unwrap()
+                .is_empty()
         );
     }
 
