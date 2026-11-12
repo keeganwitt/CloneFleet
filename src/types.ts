@@ -193,6 +193,7 @@ export interface CommitInfo {
   author: string;
   dateUnix: number;
   subject: string;
+  body: string;
 }
 
 export interface FileDiff {

@@ -822,3 +822,43 @@ h3 .repo-path {
 .sidebar button[aria-current="page"]:focus {
   outline: none;
 }
+
+.commit > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.commit > summary::-webkit-details-marker {
+  display: none;
+}
+
+.commit > summary::before,
+.commit-no-body::before {
+  display: inline-block;
+  width: 1em;
+  color: var(--muted);
+}
+
+.commit > summary::before {
+  content: "▸";
+}
+
+.commit[open] > summary::before {
+  content: "▾";
+}
+
+.commit-no-body::before {
+  content: "";
+}
+
+.commit > summary:hover {
+  background: var(--selected);
+}
+
+.commit-body {
+  margin: 4px 0 8px 1em;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  font-size: 12px;
+  border-left: 2px solid var(--border);
+}

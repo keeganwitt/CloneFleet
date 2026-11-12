@@ -13,6 +13,7 @@ pub struct CommitInfo {
     pub author: String,
     pub date_unix: i64,
     pub subject: String,
+    pub body: String,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -95,14 +96,17 @@ fn truncate_patch(patch: &str) -> (String, bool) {
 
 fn parse_log(output: &str) -> Vec<CommitInfo> {
     output
-        .lines()
-        .filter_map(|line| {
-            let mut fields = line.splitn(4, '\0');
+        .split('\x1e')
+        .map(|record| record.trim_start_matches('\n'))
+        .filter(|record| !record.is_empty())
+        .filter_map(|record| {
+            let mut fields = record.splitn(5, '\0');
             Some(CommitInfo {
                 sha: fields.next()?.to_string(),
                 author: fields.next()?.to_string(),
                 date_unix: fields.next()?.parse().unwrap_or(0),
                 subject: fields.next()?.to_string(),
+                body: fields.next().unwrap_or_default().trim().to_string(),
             })
         })
         .collect()
@@ -140,7 +144,7 @@ pub async fn branch_diff(
             "log",
             "--no-color",
             &max_count,
-            "--format=%H%x00%an%x00%ct%x00%s",
+            "--format=%H%x00%an%x00%ct%x00%s%x00%b%x1e",
             &range,
         ])
         .await?;
@@ -266,6 +270,18 @@ mod tests {
     }
 
     #[test]
+    fn parses_commits_with_multi_line_bodies() {
+        let output = "aaa\0Ann\x00100\0Subject one\0First paragraph.\n\nSecond paragraph.\n\x1e\nbbb\0Bob\x00200\0Subject two\0\x1e\n";
+        let commits = parse_log(output);
+        assert_eq!(commits.len(), 2);
+        assert_eq!(commits[0].subject, "Subject one");
+        assert_eq!(commits[0].body, "First paragraph.\n\nSecond paragraph.");
+        assert_eq!(commits[1].sha, "bbb");
+        assert_eq!(commits[1].date_unix, 200);
+        assert_eq!(commits[1].body, "");
+    }
+
+    #[test]
     fn splits_patches_only_at_file_headers() {
         let patch =
             "diff --git a/x b/x\n+text mentioning diff --git inline\ndiff --git a/y b/y\n-y\n";
@@ -295,7 +311,12 @@ mod tests {
         let fixture = Fixture::new();
         let work = &fixture.work;
         fixture.git(work, &["switch", "--quiet", "-c", "feature"]);
-        fixture.commit(work, "feature.txt", "one\ntwo\n", "add feature");
+        fixture.commit(
+            work,
+            "feature.txt",
+            "one\ntwo\n",
+            "add feature\n\nExplains why the feature exists.\nAcross two lines.",
+        );
         fixture.git(work, &["mv", "README.md", "DOCS.md"]);
         fixture.git(work, &["commit", "--quiet", "-m", "rename readme"]);
         fixture.git(work, &["switch", "--quiet", "main"]);
@@ -308,6 +329,11 @@ mod tests {
         assert_eq!(diff.base, "origin/main");
         let subjects: Vec<&str> = diff.commits.iter().map(|c| c.subject.as_str()).collect();
         assert_eq!(subjects, vec!["rename readme", "add feature"]);
+        assert_eq!(diff.commits[0].body, "");
+        assert_eq!(
+            diff.commits[1].body,
+            "Explains why the feature exists.\nAcross two lines."
+        );
         assert!(!diff.commits_truncated);
 
         let files: Vec<(&str, Option<&str>, Option<u32>)> = diff

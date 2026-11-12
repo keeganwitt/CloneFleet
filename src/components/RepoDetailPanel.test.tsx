@@ -42,7 +42,16 @@ const branch = (name: string, overrides: Partial<BranchInfo> = {}): BranchInfo =
 const diff: BranchDiff = {
   branch: "feature",
   base: "origin/main",
-  commits: [{ sha: "abcdef1234567", author: "Ann", dateUnix: now - 3600, subject: "Add feature" }],
+  commits: [
+    {
+      sha: "abcdef1234567",
+      author: "Ann",
+      dateUnix: now - 3600,
+      subject: "Add feature",
+      body: "Why it matters.\n\nDetails on a second paragraph.",
+    },
+    { sha: "1234567abcdef", author: "Bob", dateUnix: now - 7200, subject: "Tidy", body: "" },
+  ],
   commitsTruncated: false,
   files: [
     {
@@ -157,9 +166,15 @@ describe("RepoDetailPanel", () => {
     render(<Harness initialTab="branches" />);
     await user.click(await screen.findByRole("button", { name: "feature" }));
 
-    expect(await screen.findByText("1 commit not on origin/main")).toBeInTheDocument();
+    expect(await screen.findByText("2 commits not on origin/main")).toBeInTheDocument();
     expect(screen.getByText("Add feature")).toBeInTheDocument();
     expect(screen.getByText("abcdef12")).toBeInTheDocument();
+    const body = screen.getByText(/Why it matters\./);
+    expect(body).not.toBeVisible();
+    await user.click(screen.getByText("Add feature"));
+    expect(body).toBeVisible();
+    expect(body.textContent).toBe("Why it matters.\n\nDetails on a second paragraph.");
+    expect(screen.getByText("Tidy").closest("details")).toBeNull();
     expect(screen.getByText("+hello")).toBeInTheDocument();
     expect(calls.find((c) => c.cmd === "branch_diff")?.args).toEqual({
       path: "/src/repo",

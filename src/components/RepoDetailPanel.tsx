@@ -273,14 +273,28 @@ function BranchDiffView({ path, branch, now }: { path: string; branch: string; n
       </h4>
       {commits.length > 0 && (
         <ul className="commit-list">
-          {commits.map((commit) => (
-            <li key={commit.sha}>
-              <code>{commit.sha.slice(0, 8)}</code> {commit.subject}{" "}
-              <span className="muted">
-                {commit.author}, {formatAge(now, commit.dateUnix)}
-              </span>
-            </li>
-          ))}
+          {commits.map((commit) => {
+            const line = (
+              <>
+                <code>{commit.sha.slice(0, 8)}</code> {commit.subject}{" "}
+                <span className="muted">
+                  {commit.author}, {formatAge(now, commit.dateUnix)}
+                </span>
+              </>
+            );
+            return (
+              <li key={commit.sha}>
+                {commit.body ? (
+                  <details className="commit">
+                    <summary title="Show the full commit message">{line}</summary>
+                    <pre className="commit-body">{commit.body}</pre>
+                  </details>
+                ) : (
+                  <div className="commit commit-no-body">{line}</div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
       <h4>
