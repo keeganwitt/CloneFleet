@@ -72,7 +72,12 @@ pub async fn rebase_fork(git: &mut Git) -> Result<(Outcome, Option<PushPlan>), G
             return Ok((failed, None));
         }
     }
-    let Some(branch) = remote_default_branch(git, UPSTREAM_REMOTE).await? else {
+    let configured = git.branch_settings().primary.clone();
+    let branch = match configured {
+        Some(branch) => Some(branch),
+        None => remote_default_branch(git, UPSTREAM_REMOTE).await?,
+    };
+    let Some(branch) = branch else {
         return Ok((
             Outcome::skipped(
                 SkipReason::NoDefaultBranch,

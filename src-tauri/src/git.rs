@@ -5,6 +5,8 @@ use std::time::Duration;
 use serde::Serialize;
 use tokio::process::Command;
 
+use crate::store::BranchSettings;
+
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(300);
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -24,7 +26,7 @@ impl CommandRecord {
 
 #[derive(Debug, thiserror::Error)]
 pub enum GitError {
-    #[error("failed to run git: {0}")]
+    #[error("failed to run git ({0}); check its location in Settings")]
     Spawn(#[from] std::io::Error),
     #[error("git {args} timed out after {seconds}s")]
     Timeout { args: String, seconds: u64 },
@@ -33,16 +35,34 @@ pub enum GitError {
 }
 
 pub struct Git {
+    program: PathBuf,
     repo: PathBuf,
+    settings: BranchSettings,
     log: Vec<CommandRecord>,
 }
 
 impl Git {
+    #[cfg(test)]
     pub fn new(repo: impl Into<PathBuf>) -> Self {
+        Self::with_settings(repo, BranchSettings::default())
+    }
+
+    pub fn with_settings(repo: impl Into<PathBuf>, settings: BranchSettings) -> Self {
         Self {
+            program: PathBuf::from("git"),
             repo: repo.into(),
+            settings,
             log: Vec::new(),
         }
+    }
+
+    pub fn with_program(mut self, program: impl Into<PathBuf>) -> Self {
+        self.program = program.into();
+        self
+    }
+
+    pub fn branch_settings(&self) -> &BranchSettings {
+        &self.settings
     }
 
     pub fn into_log(self) -> Vec<CommandRecord> {
@@ -50,7 +70,7 @@ impl Git {
     }
 
     pub async fn run(&mut self, args: &[&str]) -> Result<CommandRecord, GitError> {
-        let mut command = Command::new("git");
+        let mut command = Command::new(&self.program);
         command
             .arg("-C")
             .arg(&self.repo)
@@ -157,6 +177,17 @@ mod tests {
         assert!(record.stdout.starts_with("git version"));
         assert!(!git.succeeds(&["rev-parse", "--git-dir"]).await.unwrap());
         assert_eq!(git.into_log().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn reports_a_missing_git_program_helpfully() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut git = Git::new(dir.path()).with_program(dir.path().join("no-such-git"));
+        let error = git.run(&["--version"]).await.unwrap_err();
+        assert!(
+            error.to_string().contains("check its location in Settings"),
+            "{error}"
+        );
     }
 
     #[tokio::test]

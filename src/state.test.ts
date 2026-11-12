@@ -11,7 +11,10 @@ const summary: RepoSummary = {
   untracked: 0,
   conflicts: 0,
   operation: null,
+  lastFetchUnix: null,
   defaultBranch: "main",
+  mainBranches: ["main"],
+  defaultOverridden: false,
 };
 
 const result: ActionResult = {

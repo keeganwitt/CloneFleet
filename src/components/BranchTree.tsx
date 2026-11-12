@@ -14,6 +14,7 @@ interface Props {
   nowUnix: number;
   isSelected: (name: string) => boolean;
   onSetSelected: (names: string[], selected: boolean) => void;
+  onOpenBranch?: (name: string) => void;
 }
 
 interface TriStateProps {
@@ -44,7 +45,14 @@ export function selectableBranches(entries: BranchEntry[]): string[] {
   return entries.filter((e) => e.category !== "protected").map((e) => e.branch.name);
 }
 
-export function BranchTree({ repoName, entries, nowUnix, isSelected, onSetSelected }: Props) {
+export function BranchTree({
+  repoName,
+  entries,
+  nowUnix,
+  isSelected,
+  onSetSelected,
+  onOpenBranch,
+}: Props) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const tree = buildTree(entries, (entry) => entry.branch.name);
   const toggleFolder = (path: string) =>
@@ -72,7 +80,17 @@ export function BranchTree({ repoName, entries, nowUnix, isSelected, onSetSelect
                 onChange={() => onSetSelected([branch.name], !isSelected(branch.name))}
               />
             )}
-            <code title={branch.name}>{node.name}</code>
+            {onOpenBranch ? (
+              <button
+                className="file-button"
+                title={`Show commits and changes on ${branch.name}`}
+                onClick={() => onOpenBranch(branch.name)}
+              >
+                <code>{node.name}</code>
+              </button>
+            ) : (
+              <code title={branch.name}>{node.name}</code>
+            )}
             <span className={`category-${category}`}>{describeBranch(branch, category)}</span>
             <span className="muted">{formatAge(nowUnix, branch.lastCommitUnix)}</span>
             <span className="muted subject" title={`${branch.author}: ${branch.subject}`}>

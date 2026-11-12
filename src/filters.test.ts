@@ -12,7 +12,10 @@ const clean: RepoSummary = {
   untracked: 0,
   conflicts: 0,
   operation: null,
+  lastFetchUnix: null,
   defaultBranch: "main",
+  mainBranches: ["main"],
+  defaultOverridden: false,
 };
 
 function repo(path: string, summary?: Partial<RepoSummary>): RepoState {
@@ -82,8 +85,16 @@ it("hides repos without a summary only when a status filter is active", () => {
   expect(matches(loading, { sync: "behind" })).toBe(false);
 });
 
+it("filters by directory without matching sibling prefixes", () => {
+  expect(matches(repo("/work/api"), { directory: "/work" })).toBe(true);
+  expect(matches(repo("/work/api"), { directory: "/work/" })).toBe(true);
+  expect(matches(repo("/workshop/api"), { directory: "/work" })).toBe(false);
+  expect(matches(repo("C:\\src\\api"), { directory: "C:\\src" })).toBe(true);
+});
+
 it("reports whether any filter is active", () => {
   expect(isFiltering(defaultFilters)).toBe(false);
   expect(isFiltering({ ...defaultFilters, search: "  " })).toBe(false);
   expect(isFiltering({ ...defaultFilters, sync: "ahead" })).toBe(true);
+  expect(isFiltering({ ...defaultFilters, directory: "/work" })).toBe(true);
 });

@@ -6,10 +6,12 @@ Your fleet of Git clones, under one command. A cross-platform desktop app to kee
 
 ## Features
 
-- **Add repositories** by picking a directory. It is scanned up to four levels deep; linked worktrees, submodules, hidden directories, and common build/dependency directories are skipped.
+- **Open directories of repositories**, like a code editor's workspace. **Open** replaces the current set (and remembers it under **Recent**), **Add** appends another directory, and each directory can be removed or rescanned. Directories are scanned up to four levels deep; linked worktrees, submodules, hidden directories, and common build/dependency directories are skipped. Individual repositories can be removed from the list and stay hidden across rescans until restored.
 - **Search and filter** the repository list by name, path, or branch, by working tree state, and by upstream sync state.
 - **Checkout the default branch.** Repositories with uncommitted changes to tracked files are skipped and reported, with per-repository options to stash (never unstashed automatically) or commit those changes.
-- **Inspect changes**: expand a repository to list its modified, staged, conflicted, and untracked files.
+- **Repository details panel** with tabs for **Changes** (changed files with per-file diffs), **Branches** (each branch's commits not on the base and its diff since it branched), and **Main branches** (per-repository primary branch plus extra protected main branches such as `dev` or `2.x`, which also count as merge targets).
+- **Bulk run summary** after every bulk action, with counts per outcome that filter the table, and a fetch-freshness indicator per repository.
+- **Settings** for the git executable (detected automatically, including Homebrew locations that macOS GUI apps don't see on `PATH`, or chosen explicitly) and the theme (system, light, or dark).
 - **Fetch** every remote with `--prune` without touching working trees.
 - **Pull** with `--ff-only`, regardless of `pull.rebase` or autostash settings.
 - **Check the default branch**: refreshes `origin/HEAD` (`git remote set-head --auto`), detects when the remote renamed its default branch (for example `master` to `main`), and offers to rename the local branch and point it at the new upstream.

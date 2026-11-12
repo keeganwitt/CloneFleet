@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { basename, describeChanges, describeSync } from "./format";
+import { basename, describeChanges, describeSync, parentDirectory } from "./format";
 import type { RepoSummary } from "./types";
 
 const clean: RepoSummary = {
@@ -11,13 +11,26 @@ const clean: RepoSummary = {
   untracked: 0,
   conflicts: 0,
   operation: null,
+  lastFetchUnix: null,
   defaultBranch: "main",
+  mainBranches: ["main"],
+  defaultOverridden: false,
 };
 
 describe("basename", () => {
   it("handles POSIX and Windows paths", () => {
     expect(basename("/home/me/repo/")).toBe("repo");
     expect(basename("C:\\src\\repo")).toBe("repo");
+  });
+});
+
+describe("parentDirectory", () => {
+  it("returns the directory containing a path on POSIX and Windows", () => {
+    expect(parentDirectory("/Users/me/src/repo")).toBe("/Users/me/src");
+    expect(parentDirectory("/Users/me/src/repo/")).toBe("/Users/me/src");
+    expect(parentDirectory("C:\\src\\repo")).toBe("C:\\src");
+    expect(parentDirectory("/repo")).toBe("/");
+    expect(parentDirectory("repo")).toBe("");
   });
 });
 

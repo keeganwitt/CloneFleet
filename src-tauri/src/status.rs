@@ -44,6 +44,7 @@ pub struct RepoStatus {
     #[serde(flatten)]
     pub working_tree: WorkingTreeStatus,
     pub operation: Option<InProgressOperation>,
+    pub last_fetch_unix: Option<i64>,
 }
 
 pub fn parse_porcelain_v2(output: &str) -> WorkingTreeStatus {
@@ -93,6 +94,18 @@ pub fn detect_operation(git_dir: &Path) -> Option<InProgressOperation> {
     }
 }
 
+pub fn last_fetch_unix(git_dir: &Path) -> Option<i64> {
+    let modified = std::fs::metadata(git_dir.join("FETCH_HEAD"))
+        .ok()?
+        .modified()
+        .ok()?;
+    let seconds = modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs();
+    i64::try_from(seconds).ok()
+}
+
 pub async fn repo_status(git: &mut Git) -> Result<RepoStatus, GitError> {
     let porcelain = git
         .run_ok(&[
@@ -103,9 +116,11 @@ pub async fn repo_status(git: &mut Git) -> Result<RepoStatus, GitError> {
         ])
         .await?;
     let git_dir = git.run_ok(&["rev-parse", "--absolute-git-dir"]).await?;
+    let git_dir = PathBuf::from(git_dir.trim());
     Ok(RepoStatus {
         working_tree: parse_porcelain_v2(&porcelain),
-        operation: detect_operation(&PathBuf::from(git_dir.trim())),
+        operation: detect_operation(&git_dir),
+        last_fetch_unix: last_fetch_unix(&git_dir),
     })
 }
 
@@ -164,6 +179,10 @@ pub async fn remote_default_branch(
 }
 
 pub async fn default_branch(git: &mut Git) -> Result<Option<DefaultBranch>, GitError> {
+    if let Some(name) = git.branch_settings().primary.clone() {
+        let remote = primary_remote(git).await?;
+        return Ok(Some(DefaultBranch { name, remote }));
+    }
     let Some(remote) = primary_remote(git).await? else {
         return local_fallback_branch(git).await;
     };

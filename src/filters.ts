@@ -1,4 +1,4 @@
-import { basename } from "./format";
+import { basename, isWithin } from "./format";
 import type { RepoState } from "./state";
 import type { RepoSummary } from "./types";
 
@@ -6,12 +6,13 @@ export type ChangesFilter = "all" | "clean" | "modified" | "untracked" | "inProg
 export type SyncFilter = "all" | "upToDate" | "ahead" | "behind" | "diverged" | "noUpstream";
 
 export interface Filters {
+  directory: string;
   search: string;
   changes: ChangesFilter;
   sync: SyncFilter;
 }
 
-export const defaultFilters: Filters = { search: "", changes: "all", sync: "all" };
+export const defaultFilters: Filters = { directory: "", search: "", changes: "all", sync: "all" };
 
 export const CHANGES_OPTIONS: { value: ChangesFilter; label: string }[] = [
   { value: "all", label: "Any changes" },
@@ -76,10 +77,16 @@ function matchesSearch(repo: RepoState, search: string): boolean {
 }
 
 export function isFiltering(filters: Filters): boolean {
-  return filters.search.trim() !== "" || filters.changes !== "all" || filters.sync !== "all";
+  return (
+    filters.directory !== "" ||
+    filters.search.trim() !== "" ||
+    filters.changes !== "all" ||
+    filters.sync !== "all"
+  );
 }
 
 export function matchesFilters(repo: RepoState, filters: Filters): boolean {
+  if (filters.directory && !isWithin(repo.path, filters.directory)) return false;
   if (!matchesSearch(repo, filters.search)) return false;
   if (filters.changes === "all" && filters.sync === "all") return true;
   const summary = repo.summary;

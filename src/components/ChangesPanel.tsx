@@ -29,14 +29,20 @@ function stageLabel(change: FileChange): string | undefined {
   return change.staged ? "staged" : undefined;
 }
 
+function label(change: FileChange): string {
+  return change.originalPath ? `${change.originalPath} → ${change.path}` : change.path;
+}
+
 interface Props {
   path: string;
   summary: RepoSummary | undefined;
+  selected?: FileChange;
+  onSelect?: (change: FileChange) => void;
 }
 
 type Loaded = { changes: FileChange[] } | { error: string };
 
-export function ChangesPanel({ path, summary }: Props) {
+export function ChangesPanel({ path, summary, selected, onSelect }: Props) {
   const [loaded, setLoaded] = useState<Loaded>();
 
   useEffect(() => {
@@ -61,13 +67,24 @@ export function ChangesPanel({ path, summary }: Props) {
         const badge = BADGES[change.kind];
         const stage = stageLabel(change);
         return (
-          <li key={`${change.kind}:${change.path}`}>
+          <li
+            key={`${change.kind}:${change.path}`}
+            className={selected?.path === change.path ? "selected" : undefined}
+          >
             <span className={`change-badge change-${change.kind}`} title={badge.label}>
               {badge.letter}
             </span>
-            <code>
-              {change.originalPath ? `${change.originalPath} → ${change.path}` : change.path}
-            </code>
+            {onSelect ? (
+              <button
+                className="file-button"
+                aria-pressed={selected?.path === change.path}
+                onClick={() => onSelect(change)}
+              >
+                <code>{label(change)}</code>
+              </button>
+            ) : (
+              <code>{label(change)}</code>
+            )}
             {stage && <span className="muted">{stage}</span>}
           </li>
         );

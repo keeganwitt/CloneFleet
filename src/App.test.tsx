@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import App from "./App";
-import type { Action, ActionResult, Outcome, PushPlan, RepoSummary } from "./types";
+import type { Action, ActionResult, Outcome, PushPlan, RepoSummary, WorkspaceView } from "./types";
 
 const summary: RepoSummary = {
   branch: "feature",
@@ -14,17 +14,25 @@ const summary: RepoSummary = {
   untracked: 0,
   conflicts: 0,
   operation: null,
+  lastFetchUnix: null,
   defaultBranch: "main",
+  mainBranches: ["main"],
+  defaultOverridden: false,
 };
 
 interface Backend {
   repos: string[];
   summaries?: Record<string, Partial<RepoSummary>>;
   outcomes?: Partial<Record<Action["type"], Outcome>>;
+  outcomesByPath?: Record<string, Outcome>;
   discovered?: string[];
+  roots?: string[];
+  recent?: string[][];
+  excluded?: string[];
   pushPlans?: Record<string, PushPlan>;
   renames?: Record<string, Action>;
   confirmed?: boolean;
+  gitError?: string;
 }
 
 function followUpFor(backend: Backend, action: Action, path: string): Action | null {
@@ -36,22 +44,81 @@ function followUpFor(backend: Backend, action: Action, path: string): Action | n
   return null;
 }
 
+function defaultRoots(backend: Backend): string[] {
+  return [...new Set(backend.repos.map((p) => p.slice(0, p.lastIndexOf("/"))))];
+}
+
+function workspaceView(backend: Backend): WorkspaceView {
+  const roots = backend.roots ?? defaultRoots(backend);
+  return {
+    roots: roots.map((path) => ({
+      path,
+      repoCount: backend.repos.filter((p) => p.startsWith(`${path}/`)).length,
+      missing: false,
+    })),
+    repos: backend.repos,
+    excludedCount: backend.excluded?.length ?? 0,
+    recent: backend.recent ?? [],
+  };
+}
+
 function mockBackend(backend: Backend) {
   const calls: { cmd: string; args: Record<string, unknown> }[] = [];
   mockIPC((cmd, payload) => {
     const args = (payload ?? {}) as Record<string, unknown>;
     calls.push({ cmd, args });
     switch (cmd) {
-      case "list_repos":
-        return backend.repos;
+      case "get_settings":
+        return {
+          settings: { gitPath: null, theme: "system" },
+          detectedGit: "/usr/bin/git",
+          activeGit: backend.gitError
+            ? { path: null, version: null, error: backend.gitError }
+            : { path: "/usr/bin/git", version: "git version 2.56.0", error: null },
+        };
+      case "plugin:window|set_theme":
+        return null;
+      case "load_workspace":
+        return workspaceView(backend);
+      case "open_directories": {
+        const paths = args.paths as string[];
+        const previous = backend.roots ?? defaultRoots(backend);
+        backend.recent = [previous, ...(backend.recent ?? [])];
+        backend.roots = paths;
+        backend.repos = [...(backend.discovered ?? [])].sort();
+        return workspaceView(backend);
+      }
+      case "open_recent": {
+        backend.roots = args.roots as string[];
+        backend.repos = backend.repos.filter((p) => backend.roots!.some((r) => p.startsWith(r)));
+        return workspaceView(backend);
+      }
+      case "add_directories":
+        backend.roots = [...(backend.roots ?? defaultRoots(backend)), ...(args.paths as string[])];
+        backend.repos = [...backend.repos, ...(backend.discovered ?? [])].sort();
+        return workspaceView(backend);
+      case "remove_directory": {
+        const removed = args.path as string;
+        backend.roots = (backend.roots ?? defaultRoots(backend)).filter((r) => r !== removed);
+        backend.repos = backend.repos.filter((p) => !p.startsWith(`${removed}/`));
+        return workspaceView(backend);
+      }
+      case "rescan_workspace":
+        backend.repos = [...new Set([...backend.repos, ...(backend.discovered ?? [])])].sort();
+        return workspaceView(backend);
+      case "restore_excluded":
+        backend.repos = [...backend.repos, ...(backend.excluded ?? [])].sort();
+        backend.excluded = [];
+        return workspaceView(backend);
       case "repo_summary":
         return { ...summary, ...backend.summaries?.[args.path as string] };
       case "run_action": {
         const action = args.action as Action;
-        const outcome = backend.outcomes?.[action.type] ?? {
-          status: "succeeded",
-          message: `${action.type} done`,
-        };
+        const outcome = backend.outcomesByPath?.[args.path as string] ??
+          backend.outcomes?.[action.type] ?? {
+            status: "succeeded",
+            message: `${action.type} done`,
+          };
         return {
           outcome,
           followUp: followUpFor(backend, action, args.path as string),
@@ -74,13 +141,11 @@ function mockBackend(backend: Backend) {
         return { hasRemotes: true, branches: [], stashes: [], dirtyWorktrees: [], warnings: [] };
       case "plugin:dialog|message":
         return backend.confirmed === false ? "Cancel" : "Push";
-      case "add_directory":
-        backend.repos = [...backend.repos, ...(backend.discovered ?? [])].sort();
-        return backend.repos;
       case "remove_repos": {
         const removed = args.paths as string[];
         backend.repos = backend.repos.filter((p) => !removed.includes(p));
-        return backend.repos;
+        backend.excluded = [...(backend.excluded ?? []), ...removed];
+        return workspaceView(backend);
       }
       default:
         throw new Error(`unexpected command ${cmd}`);
@@ -97,7 +162,7 @@ describe("App", () => {
   it("shows an empty state when no repositories are configured", async () => {
     mockBackend({ repos: [] });
     render(<App />);
-    expect(await screen.findByText(/No repositories yet/)).toBeInTheDocument();
+    expect(await screen.findByText(/No directories open/)).toBeInTheDocument();
   });
 
   it("lists repositories with their status", async () => {
@@ -110,18 +175,23 @@ describe("App", () => {
     expect(within(row).getByText("↑1")).toBeInTheDocument();
   });
 
-  it("expands a repository to show its changed files", async () => {
+  it("opens the detail panel on the changes tab and closes it with Escape", async () => {
     const user = userEvent.setup();
     const calls = mockBackend({ repos: ["/src/alpha"] });
     render(<App />);
     await user.click(await screen.findByRole("button", { name: "Show changes in alpha" }));
 
-    expect(await screen.findByText("src/app.ts")).toBeInTheDocument();
+    const panel = await screen.findByRole("dialog", { name: "Details for alpha" });
+    expect(within(panel).getByRole("tab", { name: "Changes" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(await within(panel).findByText("src/app.ts")).toBeInTheDocument();
     expect(calls.filter((c) => c.cmd === "list_changes")).toEqual([
       { cmd: "list_changes", args: { path: "/src/alpha" } },
     ]);
-    await user.click(screen.getByRole("button", { name: "Hide changes in alpha" }));
-    expect(screen.queryByText("src/app.ts")).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("does not offer a changes list for clean repositories", async () => {
@@ -196,7 +266,9 @@ describe("App", () => {
     expect(screen.queryByText("gamma")).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Filter by sync"), "behind");
     expect(screen.queryByText("beta")).not.toBeInTheDocument();
-    expect(screen.getByText("1 of 1 selected (2 hidden by filters)")).toBeInTheDocument();
+    const bar = screen.getByRole("region", { name: "Selection actions" });
+    expect(bar).toHaveTextContent("1 selected");
+    expect(bar).toHaveTextContent("(2 more hidden by filters)");
 
     await user.click(screen.getByRole("button", { name: "Pull" }));
     await screen.findByText("pull done");
@@ -341,13 +413,157 @@ describe("App", () => {
     expect(screen.getByText("alpha")).toBeInTheDocument();
   });
 
+  it("opens a directory in place of the current one and can switch back via recent", async () => {
+    const user = userEvent.setup();
+    const calls = mockBackend({
+      repos: ["/src/alpha"],
+      roots: ["/src"],
+      discovered: ["/picked/one"],
+    });
+    render(<App />);
+    await screen.findByText("alpha");
+    await user.click(screen.getByRole("button", { name: "Open directory…" }));
+
+    expect(await screen.findByText("Opened picked: 1 repository")).toBeInTheDocument();
+    expect(screen.getByText("one")).toBeInTheDocument();
+    expect(screen.queryByText("alpha")).not.toBeInTheDocument();
+    expect(calls.find((c) => c.cmd === "open_directories")?.args).toEqual({ paths: ["/picked"] });
+
+    await user.selectOptions(screen.getByLabelText("Open recent"), "src");
+    expect(calls.find((c) => c.cmd === "open_recent")?.args).toEqual({ roots: ["/src"] });
+  });
+
+  it("shows open directories with repo counts and removes one", async () => {
+    const user = userEvent.setup();
+    const calls = mockBackend({
+      repos: ["/a/one", "/a/two", "/b/three"],
+      roots: ["/a", "/b"],
+    });
+    render(<App />);
+    const directories = await screen.findByRole("group", { name: "Directories" });
+    expect(directories).toHaveTextContent("a2 repos×b1 repo×");
+
+    await user.click(screen.getByRole("button", { name: "Remove directory /a" }));
+    await waitFor(() => expect(screen.queryByText("one")).not.toBeInTheDocument());
+    expect(screen.getByText("three")).toBeInTheDocument();
+    expect(calls.find((c) => c.cmd === "remove_directory")?.args).toEqual({ path: "/a" });
+  });
+
+  it("filters by directory when more than one is open", async () => {
+    const user = userEvent.setup();
+    mockBackend({ repos: ["/a/one", "/b/two"], roots: ["/a", "/b"] });
+    render(<App />);
+    await user.selectOptions(await screen.findByLabelText("Filter by directory"), "/b");
+    expect(screen.queryByText("one")).not.toBeInTheDocument();
+    expect(screen.getByText("two")).toBeInTheDocument();
+  });
+
+  it("keeps removed subdirectory repositories out until restored", async () => {
+    const user = userEvent.setup();
+    mockBackend({ repos: ["/src/alpha", "/src/beta"], roots: ["/src"] });
+    render(<App />);
+    await user.click(await screen.findByLabelText("Select alpha"));
+    await user.click(screen.getByRole("button", { name: "Remove from list" }));
+    expect(await screen.findByText(/1 removed repository/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Rescan" }));
+    await screen.findByText("No new repositories found");
+    expect(screen.queryByText("alpha")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+    expect(await screen.findByText("alpha")).toBeInTheDocument();
+    expect(screen.queryByText(/removed repositor/)).not.toBeInTheDocument();
+  });
+
+  it("summarizes a bulk run and filters the table to one outcome", async () => {
+    const user = userEvent.setup();
+    const calls = mockBackend({
+      repos: ["/src/alpha", "/src/beta", "/src/gamma"],
+      outcomesByPath: {
+        "/src/beta": { status: "skipped", reason: "uncommittedChanges", message: "dirty" },
+        "/src/gamma": { status: "failed", message: "boom" },
+      },
+    });
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Select all 3" }));
+    await user.click(screen.getByRole("button", { name: "Pull" }));
+
+    const summary = await screen.findByRole("status", { name: "Last run" });
+    await waitFor(() => expect(summary).toHaveTextContent("1 failed"));
+    expect(summary).toHaveTextContent("Pull");
+    expect(summary).toHaveTextContent("1 succeeded");
+    expect(summary).toHaveTextContent("1 skipped");
+    expect(summary).toHaveTextContent("(1 uncommitted changes)");
+
+    await user.click(within(summary).getByRole("button", { name: "1 failed" }));
+    expect(screen.getByText("gamma")).toBeInTheDocument();
+    expect(screen.queryByText("alpha")).not.toBeInTheDocument();
+    expect(screen.queryByText("beta")).not.toBeInTheDocument();
+
+    expect(screen.getByRole("region", { name: "Selection actions" })).toHaveTextContent(
+      "(2 more hidden by filters)",
+    );
+    await user.click(screen.getByRole("button", { name: "Fetch" }));
+    await waitFor(() =>
+      expect(actionCalls(calls).at(-1)).toEqual(["/src/gamma", { type: "fetch" }]),
+    );
+    expect(await screen.findByText("alpha")).toBeInTheDocument();
+  });
+
+  it("selects a range with shift-click", async () => {
+    const user = userEvent.setup();
+    mockBackend({ repos: ["/src/a1", "/src/a2", "/src/a3", "/src/a4"] });
+    render(<App />);
+    await user.click(await screen.findByLabelText("Select a1"));
+    await user.keyboard("{Shift>}");
+    await user.click(screen.getByLabelText("Select a3"));
+    await user.keyboard("{/Shift}");
+    expect(screen.getByLabelText("Select a2")).toBeChecked();
+    expect(screen.getByLabelText("Select a3")).toBeChecked();
+    expect(screen.getByLabelText("Select a4")).not.toBeChecked();
+    expect(screen.getByRole("region", { name: "Selection actions" })).toHaveTextContent(
+      "3 selected",
+    );
+  });
+
+  it("shows how fresh the fetched data is and fetches everything visible", async () => {
+    const user = userEvent.setup();
+    const now = Math.floor(Date.now() / 1000);
+    const calls = mockBackend({
+      repos: ["/src/alpha", "/src/beta"],
+      summaries: {
+        "/src/alpha": { lastFetchUnix: now - 3 * 86_400 },
+        "/src/beta": { lastFetchUnix: now - 600 },
+      },
+    });
+    render(<App />);
+    expect(await screen.findByText("Oldest fetch 3d ago")).toHaveClass("stale");
+    expect(screen.getByText("fetched 3d ago")).toHaveClass("stale");
+    await user.click(screen.getByRole("button", { name: "Fetch all 2" }));
+    await waitFor(() =>
+      expect(actionCalls(calls)).toEqual([
+        ["/src/alpha", { type: "fetch" }],
+        ["/src/beta", { type: "fetch" }],
+      ]),
+    );
+  });
+
+  it("warns when git cannot be found and links to settings", async () => {
+    const user = userEvent.setup();
+    mockBackend({ repos: [], gitError: "git was not found; set its location in Settings" });
+    render(<App />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("git was not found");
+    await user.click(screen.getByRole("button", { name: "Open settings" }));
+    expect(screen.getByRole("dialog", { name: "Settings" })).toBeInTheDocument();
+  });
+
   it("adds repositories discovered in a picked directory", async () => {
     const user = userEvent.setup();
     mockBackend({ repos: [], discovered: ["/picked/one", "/picked/two"] });
     render(<App />);
     await user.click(await screen.findByRole("button", { name: "Add directory…" }));
 
-    expect(await screen.findByText("Added 2 repositories")).toBeInTheDocument();
+    expect(await screen.findByText("Added picked: 2 repositories")).toBeInTheDocument();
     expect(screen.getByText("one")).toBeInTheDocument();
     expect(screen.getByText("two")).toBeInTheDocument();
   });

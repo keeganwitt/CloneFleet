@@ -9,7 +9,10 @@ export interface RepoSummary {
   untracked: number;
   conflicts: number;
   operation: InProgressOperation | null;
+  lastFetchUnix: number | null;
   defaultBranch: string | null;
+  mainBranches: string[];
+  defaultOverridden: boolean;
 }
 
 export type Action =
@@ -154,4 +157,65 @@ export interface UnpushedReport {
   stashes: StashEntry[];
   dirtyWorktrees: string[];
   warnings: string[];
+}
+
+export interface RootView {
+  path: string;
+  repoCount: number;
+  missing: boolean;
+}
+
+export interface WorkspaceView {
+  roots: RootView[];
+  repos: string[];
+  excludedCount: number;
+  recent: string[][];
+}
+
+export interface BranchSettings {
+  primary: string | null;
+  additional: string[];
+}
+
+export interface CommitInfo {
+  sha: string;
+  author: string;
+  dateUnix: number;
+  subject: string;
+}
+
+export interface FileDiff {
+  path: string;
+  oldPath: string | null;
+  additions: number | null;
+  deletions: number | null;
+  patch: string;
+  truncated: boolean;
+}
+
+export interface BranchDiff {
+  branch: string;
+  base: string;
+  commits: CommitInfo[];
+  commitsTruncated: boolean;
+  files: FileDiff[];
+}
+
+export type Theme = "system" | "light" | "dark";
+
+export interface AppSettings {
+  gitPath: string | null;
+  theme: Theme;
+}
+
+export interface GitInfo {
+  path: string | null;
+  version: string | null;
+  error: string | null;
+}
+
+export interface SettingsView {
+  settings: AppSettings;
+  detectedGit: string | null;
+  activeGit: GitInfo;
 }

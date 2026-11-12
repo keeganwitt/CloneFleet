@@ -19,6 +19,7 @@ interface Props {
   paths: string[];
   onClose: () => void;
   onChanged: (paths: string[]) => void;
+  onOpenBranch?: (repo: string, branch: string) => void;
 }
 
 const DEFAULT_CATEGORIES: BranchCategory[] = ["merged", "remoteDeleted", "stale"];
@@ -57,7 +58,7 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function CleanupView({ paths, onClose, onChanged }: Props) {
+export function CleanupView({ paths, onClose, onChanged, onOpenBranch }: Props) {
   const [fetchFirst, setFetchFirst] = useState(true);
   const [staleDays, setStaleDays] = useState(90);
   const [shown, setShown] = useState<ReadonlySet<BranchCategory>>(new Set(DEFAULT_CATEGORIES));
@@ -277,6 +278,7 @@ export function CleanupView({ paths, onClose, onChanged }: Props) {
           shown={shown}
           selectedBranches={selectedBranches}
           selectedWorktrees={selectedWorktrees}
+          onOpenBranch={onOpenBranch && ((branch) => onOpenBranch(repo, branch))}
           onSetBranches={(names, selected) =>
             setSelectedBranches((current) => {
               const next = new Set(current);
@@ -304,6 +306,7 @@ interface SectionProps {
   selectedBranches: ReadonlySet<string>;
   selectedWorktrees: ReadonlySet<string>;
   onSetBranches: (names: string[], selected: boolean) => void;
+  onOpenBranch?: (branch: string) => void;
   onToggleWorktree: (path: string) => void;
 }
 
@@ -347,6 +350,7 @@ function RepoCleanupSection(props: SectionProps) {
             nowUnix={nowUnix}
             isSelected={(branch) => props.selectedBranches.has(key(repo, branch))}
             onSetSelected={props.onSetBranches}
+            onOpenBranch={props.onOpenBranch}
           />
         )}
         {worktrees.length > 0 && (

@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { basename, describeChanges, describeSync } from "../format";
+import { basename, describeChanges, describeSync, parentDirectory } from "../format";
 import type { RepoState } from "../state";
+import { formatAge } from "../cleanup";
+import { isStale } from "../freshness";
 import { followUpOf } from "../followUps";
 import type { Action } from "../types";
-import { ChangesPanel } from "./ChangesPanel";
 import { CommandLog } from "./CommandLog";
 
 const RUNNING_LABELS: Record<Action["type"], string> = {
@@ -34,14 +35,23 @@ function followUpLabel(action: Action): string {
 interface Props {
   repo: RepoState;
   selected: boolean;
-  onToggle: () => void;
+  nowUnix: number;
+  onToggle: (extendRange: boolean) => void;
   onAction: (action: Action) => void;
   onFollowUp: (action: Action) => void;
+  onOpenDetails: (tab: "changes" | "branches") => void;
 }
 
-export function RepoRow({ repo, selected, onToggle, onAction, onFollowUp }: Props) {
+export function RepoRow({
+  repo,
+  selected,
+  nowUnix,
+  onToggle,
+  onAction,
+  onFollowUp,
+  onOpenDetails,
+}: Props) {
   const [showLog, setShowLog] = useState(false);
-  const [showChanges, setShowChanges] = useState(false);
   const [commitMessage, setCommitMessage] = useState<string>();
   const name = basename(repo.path);
   const summary = repo.summary;
@@ -66,22 +76,35 @@ export function RepoRow({ repo, selected, onToggle, onAction, onFollowUp }: Prop
             type="checkbox"
             aria-label={`Select ${name}`}
             checked={selected}
-            onChange={onToggle}
+            onChange={(event) => onToggle((event.nativeEvent as MouseEvent).shiftKey === true)}
           />
         </td>
         <td>
-          <div className="repo-name">{name}</div>
-          <div className="repo-path muted" title={repo.path}>
-            {repo.path}
+          <button
+            className="repo-name file-button"
+            aria-label={`Open details for ${name}`}
+            onClick={() => onOpenDetails("branches")}
+          >
+            {name}
+          </button>
+          <div className="repo-path truncate-start muted" title={repo.path}>
+            <span>{parentDirectory(repo.path)}</span>
           </div>
         </td>
         <td>
           {summary ? (
             <>
               {summary.branch ?? <span className="muted">(detached)</span>}
-              {summary.defaultBranch && summary.branch !== summary.defaultBranch && (
-                <div className="muted">default: {summary.defaultBranch}</div>
+              {summary.defaultOverridden && (
+                <div className="muted" title="Main branches are configured for this repository">
+                  main: {summary.mainBranches.join(", ")}
+                </div>
               )}
+              {!summary.defaultOverridden &&
+                summary.defaultBranch &&
+                summary.branch !== summary.defaultBranch && (
+                  <div className="muted">default: {summary.defaultBranch}</div>
+                )}
             </>
           ) : repo.summaryError ? (
             <span className="error" title={repo.summaryError}>
@@ -96,9 +119,8 @@ export function RepoRow({ repo, selected, onToggle, onAction, onFollowUp }: Prop
             (summary.trackedChanges + summary.untracked + summary.conflicts > 0 ? (
               <button
                 className="changes-toggle"
-                aria-expanded={showChanges}
-                aria-label={`${showChanges ? "Hide" : "Show"} changes in ${name}`}
-                onClick={() => setShowChanges(!showChanges)}
+                aria-label={`Show changes in ${name}`}
+                onClick={() => onOpenDetails("changes")}
               >
                 {describeChanges(summary)}
               </button>
@@ -106,7 +128,20 @@ export function RepoRow({ repo, selected, onToggle, onAction, onFollowUp }: Prop
               describeChanges(summary)
             ))}
         </td>
-        <td>{summary && describeSync(summary)}</td>
+        <td>
+          {summary && (
+            <>
+              {describeSync(summary)}
+              <div
+                className={`muted fetched${isStale(nowUnix, summary.lastFetchUnix) ? " stale" : ""}`}
+              >
+                {summary.lastFetchUnix === null
+                  ? "no fetch recorded"
+                  : `fetched ${formatAge(nowUnix, summary.lastFetchUnix)}`}
+              </div>
+            </>
+          )}
+        </td>
         <td className="result">
           {repo.runningAction ? (
             <span className="muted">{RUNNING_LABELS[repo.runningAction]}</span>
@@ -156,14 +191,6 @@ export function RepoRow({ repo, selected, onToggle, onAction, onFollowUp }: Prop
           )}
         </td>
       </tr>
-      {showChanges && (
-        <tr className="log-row">
-          <td />
-          <td colSpan={6}>
-            <ChangesPanel path={repo.path} summary={summary} />
-          </td>
-        </tr>
-      )}
       {showLog && repo.result && (
         <tr className="log-row">
           <td />

@@ -13,35 +13,96 @@ async fn remotes(git: &mut Git) -> Result<Vec<String>, GitError> {
         .collect())
 }
 
-pub async fn fetch_all(git: &mut Git) -> Result<Outcome, GitError> {
+pub async fn fetch_all(git: &mut Git) -> Result<(Outcome, Option<Action>), GitError> {
     let remotes = remotes(git).await?;
     if remotes.is_empty() {
-        return Ok(Outcome::skipped(
-            SkipReason::NoRemote,
-            "No remotes configured",
+        return Ok((
+            Outcome::skipped(SkipReason::NoRemote, "No remotes configured"),
+            None,
         ));
     }
+    let primary = primary_remote(git).await?;
+    let previous = match &primary {
+        Some(remote) => remote_head(git, remote).await?,
+        None => None,
+    };
+
     let mut fetched = Vec::new();
     let mut failed = Vec::new();
     for remote in &remotes {
-        let record = git.run(&["fetch", "--prune", "--quiet", remote]).await?;
+        // Git 2.48+ refreshes refs/remotes/<remote>/HEAD during fetch; older versions ignore it.
+        let follow_head = format!("remote.{remote}.followRemoteHEAD=always");
+        let record = git
+            .run(&[
+                "-c",
+                &follow_head,
+                "fetch",
+                "--prune",
+                "--tags",
+                "--quiet",
+                remote,
+            ])
+            .await?;
         if record.success() {
             fetched.push(remote.as_str());
         } else {
             failed.push(format!("{remote}: {}", failure_message(&record)));
         }
     }
-    Ok(if failed.is_empty() {
-        Outcome::succeeded(format!("Fetched {}", fetched.join(", ")))
+
+    let mut message = if failed.is_empty() {
+        format!("Fetched {}", fetched.join(", "))
     } else if fetched.is_empty() {
-        Outcome::failed(format!("Could not fetch {}", failed.join("; ")))
+        format!("Could not fetch {}", failed.join("; "))
     } else {
-        Outcome::failed(format!(
+        format!(
             "Fetched {}; could not fetch {}",
             fetched.join(", "),
             failed.join("; ")
-        ))
-    })
+        )
+    };
+    let mut follow_up = None;
+    if let (Some(remote), Some(previous)) = (&primary, previous)
+        && let Some(current) = remote_head(git, remote).await?
+        && current != previous
+    {
+        let (change, rename) = describe_default_change(git, remote, previous, current).await?;
+        message.push_str(&format!("; {change}"));
+        follow_up = rename;
+    }
+    Ok((
+        if failed.is_empty() {
+            Outcome::succeeded(message)
+        } else {
+            Outcome::failed(message)
+        },
+        follow_up,
+    ))
+}
+
+async fn describe_default_change(
+    git: &mut Git,
+    remote: &str,
+    previous: String,
+    current: String,
+) -> Result<(String, Option<Action>), GitError> {
+    let mut message = format!("{remote}'s default branch is now {current} (was {previous})");
+    let mut follow_up = None;
+    if local_branch_exists(git, &previous).await? {
+        if local_branch_exists(git, &current).await? {
+            message.push_str(&format!(
+                "; local {current} already exists alongside {previous}"
+            ));
+        } else {
+            message.push_str(&format!("; local {previous} can be renamed"));
+            follow_up = Some(Action::RenameBranch {
+                remote: remote.to_string(),
+                from: previous,
+                to: current,
+            });
+        }
+    }
+    Ok((message, follow_up))
 }
 
 async fn remote_head(git: &mut Git, remote: &str) -> Result<Option<String>, GitError> {
@@ -104,22 +165,7 @@ pub async fn sync_default_branch(git: &mut Git) -> Result<(Outcome, Option<Actio
             None,
         ));
     };
-    let mut message = format!("{remote}'s default branch changed from {previous} to {current}");
-    let mut follow_up = None;
-    if local_branch_exists(git, &previous).await? {
-        if local_branch_exists(git, &current).await? {
-            message.push_str(&format!(
-                "; local {current} already exists alongside {previous}"
-            ));
-        } else {
-            message.push_str(&format!("; local {previous} can be renamed"));
-            follow_up = Some(Action::RenameBranch {
-                remote: remote.clone(),
-                from: previous,
-                to: current,
-            });
-        }
-    }
+    let (message, follow_up) = describe_default_change(git, &remote, previous, current).await?;
     Ok((Outcome::succeeded(message), follow_up))
 }
 
@@ -173,7 +219,7 @@ pub async fn rename_branch(
 mod tests {
     use super::*;
     use crate::actions::run_action;
-    use crate::test_support::Fixture;
+    use crate::test_support::{Fixture, git_at_least};
 
     fn rename_remote_default(fixture: &Fixture, to: &str) {
         let seed = &fixture.seed;
@@ -205,6 +251,53 @@ mod tests {
             fixture.git(&fixture.work, &["rev-list", "--count", "HEAD..origin/main"]),
             "1"
         );
+    }
+
+    #[tokio::test]
+    async fn fetch_refreshes_a_stale_remote_head_and_offers_the_rename() {
+        if !git_at_least(2, 48) {
+            return;
+        }
+        let fixture = Fixture::new();
+        rename_remote_default(&fixture, "trunk");
+
+        let (outcome, follow_up) = act(&fixture, Action::Fetch).await;
+        assert_eq!(
+            outcome,
+            Outcome::succeeded(
+                "Fetched origin; origin's default branch is now trunk (was main); local main can be renamed"
+            )
+        );
+        assert!(matches!(follow_up, Some(Action::RenameBranch { .. })));
+        assert_eq!(
+            fixture.git(
+                &fixture.work,
+                &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]
+            ),
+            "origin/trunk"
+        );
+        assert_eq!(
+            act(&fixture, Action::Fetch).await,
+            (Outcome::succeeded("Fetched origin"), None)
+        );
+    }
+
+    #[tokio::test]
+    async fn fetch_includes_tags_outside_fetched_branches_without_pruning_local_tags() {
+        let fixture = Fixture::new();
+        let seed = &fixture.seed;
+        fixture.git(seed, &["switch", "--quiet", "-c", "release"]);
+        fixture.commit(seed, "release.txt", "r\n", "release");
+        fixture.git(seed, &["tag", "v1.0"]);
+        fixture.git(seed, &["push", "--quiet", "origin", "v1.0"]);
+        fixture.git(&fixture.work, &["tag", "local-only"]);
+
+        assert_eq!(
+            act(&fixture, Action::Fetch).await.0,
+            Outcome::succeeded("Fetched origin")
+        );
+        let tags = fixture.git(&fixture.work, &["tag", "--list"]);
+        assert_eq!(tags.lines().collect::<Vec<_>>(), vec!["local-only", "v1.0"]);
     }
 
     #[tokio::test]
@@ -245,7 +338,7 @@ mod tests {
         assert_eq!(
             outcome,
             Outcome::succeeded(
-                "origin's default branch changed from main to trunk; local main can be renamed"
+                "origin's default branch is now trunk (was main); local main can be renamed"
             )
         );
         let follow_up = follow_up.unwrap();
@@ -295,7 +388,7 @@ mod tests {
         assert_eq!(
             outcome,
             Outcome::succeeded(
-                "origin's default branch changed from main to trunk; local trunk already exists alongside main"
+                "origin's default branch is now trunk (was main); local trunk already exists alongside main"
             )
         );
         assert_eq!(follow_up, None);

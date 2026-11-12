@@ -91,14 +91,23 @@ pub struct RepoSummary {
     #[serde(flatten)]
     pub status: RepoStatus,
     pub default_branch: Option<String>,
+    pub main_branches: Vec<String>,
+    pub default_overridden: bool,
 }
 
 pub async fn summarize(git: &mut Git) -> Result<RepoSummary, GitError> {
     let status = repo_status(git).await?;
     let default_branch = default_branch(git).await?.map(|b| b.name);
+    let settings = git.branch_settings();
+    let main_branches = match &default_branch {
+        Some(primary) => settings.main_branches(primary),
+        None => settings.additional.clone(),
+    };
     Ok(RepoSummary {
         status,
+        default_overridden: !settings.is_empty(),
         default_branch,
+        main_branches,
     })
 }
 
@@ -113,7 +122,7 @@ pub async fn run_action(mut git: Git, action: &Action) -> ActionResult {
             .await
             .map(|(outcome, plan)| (outcome, plan.map(|plan| Action::Push { plan }))),
         Action::Push { plan } => alone(push(&mut git, plan).await),
-        Action::Fetch => alone(fetch_all(&mut git).await),
+        Action::Fetch => fetch_all(&mut git).await,
         Action::SyncDefaultBranch => sync_default_branch(&mut git).await,
         Action::RenameBranch { remote, from, to } => {
             alone(rename_branch(&mut git, remote, from, to).await)
@@ -318,6 +327,26 @@ mod tests {
         assert_eq!(summary.status.working_tree.tracked_changes, 1);
         assert_eq!(summary.status.working_tree.untracked, 1);
         assert_eq!(summary.status.operation, None);
+    }
+
+    #[tokio::test]
+    async fn summarize_reports_when_the_repository_was_last_fetched() {
+        let fixture = Fixture::new();
+        let before = summarize(&mut Git::new(&fixture.work)).await.unwrap();
+        assert_eq!(before.status.last_fetch_unix, None);
+
+        fixture.git(&fixture.work, &["fetch", "--quiet"]);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let fetched = summarize(&mut Git::new(&fixture.work))
+            .await
+            .unwrap()
+            .status
+            .last_fetch_unix
+            .unwrap();
+        assert!((now - fetched).abs() < 60, "{now} vs {fetched}");
     }
 
     #[tokio::test]

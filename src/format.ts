@@ -4,6 +4,18 @@ export function basename(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
 
+export function parentDirectory(path: string): string {
+  const trimmed = path.replace(/[\\/]+$/, "");
+  const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  if (index < 0) return "";
+  return index === 0 ? trimmed[0] : trimmed.slice(0, index);
+}
+
+export function isWithin(path: string, root: string): boolean {
+  const trimmed = root.replace(/[\\/]+$/, "");
+  return path === trimmed || path.startsWith(`${trimmed}/`) || path.startsWith(`${trimmed}\\`);
+}
+
 const OPERATION_LABELS: Record<InProgressOperation, string> = {
   rebase: "Rebase in progress",
   merge: "Merge in progress",

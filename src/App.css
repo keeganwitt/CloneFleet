@@ -6,8 +6,9 @@
     Roboto,
     sans-serif;
   font-size: 14px;
+  --background: #ffffff;
   color: #1f2328;
-  background: #ffffff;
+  background: var(--background);
   --muted: #656d76;
   --border: #d0d7de;
   --success: #1a7f37;
@@ -16,10 +17,23 @@
   --selected: #ddf4ff;
 }
 
+:root[data-theme="dark"] {
+  --background: #0d1117;
+  color: #e6edf3;
+  background: var(--background);
+  --muted: #8d96a0;
+  --border: #30363d;
+  --success: #3fb950;
+  --warning: #d29922;
+  --danger: #f85149;
+  --selected: #172b45;
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
+    --background: #0d1117;
     color: #e6edf3;
-    background: #0d1117;
+    background: var(--background);
     --muted: #8d96a0;
     --border: #30363d;
     --success: #3fb950;
@@ -118,20 +132,35 @@ tr.selected {
   background: var(--selected);
 }
 
+.repo-table {
+  table-layout: fixed;
+}
+
+.repo-table td {
+  overflow-wrap: anywhere;
+}
+
 .repo-name {
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .repo-path {
   font-size: 12px;
-  max-width: 320px;
+}
+
+/* An RTL box clips and ellipsizes at its start; the LTR span keeps the path's own order. */
+.truncate-start {
+  direction: rtl;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.result {
-  max-width: 360px;
+.truncate-start > span {
+  direction: ltr;
+  unicode-bidi: embed;
 }
 
 .outcome-succeeded {
@@ -338,4 +367,234 @@ input.days {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.chip-missing {
+  border-color: var(--warning);
+}
+
+.chip-remove {
+  border: none;
+  padding: 0 6px;
+  border-radius: 999px;
+}
+
+.workspace-bar {
+  flex-wrap: wrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.action-bar-active {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px 0;
+  margin-bottom: 12px;
+  background: var(--selected);
+}
+
+.run-summary-items {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.run-summary button.active {
+  font-weight: 700;
+}
+
+.freshness {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stale {
+  color: var(--warning);
+}
+
+.diff {
+  margin: 4px 0;
+  padding: 6px 0;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.diff-line {
+  padding: 0 8px;
+  white-space: pre;
+}
+
+.diff-add {
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+}
+
+.diff-delete {
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+}
+
+.diff-hunk {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--border) 40%, transparent);
+}
+
+.diff-header,
+.diff-note {
+  color: var(--muted);
+}
+
+.file-diff > summary {
+  display: flex;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.detail-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(760px, 62vw);
+  display: flex;
+  flex-direction: column;
+  padding: 12px 16px;
+  background: var(--background);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 24px rgb(0 0 0 / 12%);
+  z-index: 10;
+}
+
+.detail-body {
+  overflow: auto;
+  flex: 1;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+
+.tab {
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+}
+
+.tab.active {
+  border-bottom-color: currentColor;
+  font-weight: 600;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(180px, 34%) 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.file-button {
+  border: none;
+  padding: 0;
+  text-align: left;
+}
+
+.change-list li.selected,
+.branch-list li.selected {
+  background: var(--selected);
+}
+
+.branch-list,
+.commit-list,
+.branch-checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.branch-list li {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 2px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.commit-list li {
+  padding: 2px 0;
+  font-size: 12px;
+}
+
+.branch-checklist {
+  max-height: 260px;
+  overflow: auto;
+  margin: 6px 0;
+}
+
+.main-branches label {
+  gap: 8px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 35%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+.modal {
+  width: min(560px, 92vw);
+  padding: 16px 20px;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.modal fieldset {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.modal input[type="text"] {
+  flex: 1;
+}
+
+.modal h2 {
+  margin: 0 0 16px;
+}
+
+.modal fieldset label {
+  flex-wrap: wrap;
+}
+
+.modal fieldset .muted,
+.modal fieldset .error {
+  overflow-wrap: anywhere;
+  margin: 4px 0 0;
 }

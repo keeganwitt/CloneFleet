@@ -2,18 +2,37 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 import type {
   Action,
+  AppSettings,
+  GitInfo,
+  SettingsView,
   ActionResult,
+  BranchDiff,
   BranchReport,
+  BranchSettings,
   CleanupResult,
   FileChange,
+  FileDiff,
   RepoSummary,
   UnpushedReport,
+  WorkspaceView,
 } from "./types";
 
 export const api = {
-  listRepos: () => invoke<string[]>("list_repos"),
-  addDirectory: (path: string) => invoke<string[]>("add_directory", { path }),
-  removeRepos: (paths: string[]) => invoke<string[]>("remove_repos", { paths }),
+  getSettings: () => invoke<SettingsView>("get_settings"),
+  setSettings: (settings: AppSettings) => invoke<SettingsView>("set_settings", { settings }),
+  checkGit: (path: string) => invoke<GitInfo>("check_git", { path }),
+  pickFile: async (): Promise<string | null> => {
+    const picked = await open({ directory: false, multiple: false });
+    return typeof picked === "string" ? picked : null;
+  },
+  loadWorkspace: () => invoke<WorkspaceView>("load_workspace"),
+  openDirectories: (paths: string[]) => invoke<WorkspaceView>("open_directories", { paths }),
+  openRecent: (roots: string[]) => invoke<WorkspaceView>("open_recent", { roots }),
+  addDirectories: (paths: string[]) => invoke<WorkspaceView>("add_directories", { paths }),
+  removeDirectory: (path: string) => invoke<WorkspaceView>("remove_directory", { path }),
+  rescanWorkspace: () => invoke<WorkspaceView>("rescan_workspace"),
+  removeRepos: (paths: string[]) => invoke<WorkspaceView>("remove_repos", { paths }),
+  restoreExcluded: () => invoke<WorkspaceView>("restore_excluded"),
   repoSummary: (path: string) => invoke<RepoSummary>("repo_summary", { path }),
   runAction: (path: string, action: Action) => invoke<ActionResult>("run_action", { path, action }),
   listChanges: (path: string) => invoke<FileChange[]>("list_changes", { path }),
@@ -27,6 +46,14 @@ export const api = {
     invoke<UnpushedReport>("analyze_unpushed", { path, fetch }),
   dropStashes: (path: string, stashes: string[]) =>
     invoke<CleanupResult>("drop_stashes", { path, stashes }),
+  listBranchNames: (path: string) => invoke<string[]>("list_branch_names", { path }),
+  getBranchSettings: (path: string) => invoke<BranchSettings>("get_branch_settings", { path }),
+  setBranchSettings: (path: string, settings: BranchSettings) =>
+    invoke<void>("set_branch_settings", { path, settings }),
+  branchDiff: (path: string, branch: string, base?: string) =>
+    invoke<BranchDiff>("branch_diff", { path, branch, base: base ?? null }),
+  workingFileDiff: (path: string, file: string, untracked: boolean) =>
+    invoke<FileDiff>("working_file_diff", { path, file, untracked }),
   confirmDestructive: (message: string, okLabel: string) =>
     confirm(message, { title: "Confirm", kind: "warning", okLabel, cancelLabel: "Cancel" }),
   pickDirectories: async (): Promise<string[]> => {

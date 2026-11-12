@@ -100,6 +100,16 @@ pub fn run(dir: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
+pub fn git_at_least(major: u32, minor: u32) -> bool {
+    let version = run(Path::new("."), &["--version"]);
+    let mut numbers = version
+        .trim_start_matches("git version ")
+        .split(|c: char| !c.is_ascii_digit())
+        .filter_map(|n| n.parse::<u32>().ok());
+    let found = (numbers.next().unwrap_or(0), numbers.next().unwrap_or(0));
+    found >= (major, minor)
+}
+
 fn path_str(path: &Path) -> &str {
     path.to_str().unwrap()
 }

@@ -286,6 +286,22 @@ describe("CleanupView branch tree", () => {
     expect((all as HTMLInputElement).indeterminate).toBe(true);
   });
 
+  it("opens a branch's commits and changes from the tree", async () => {
+    const user = userEvent.setup();
+    mockTree();
+    const onOpenBranch = vi.fn();
+    render(
+      <CleanupView
+        paths={["/repo"]}
+        onClose={() => {}}
+        onChanged={() => {}}
+        onOpenBranch={onOpenBranch}
+      />,
+    );
+    await user.click(await screen.findByRole("button", { name: "old" }));
+    expect(onOpenBranch).toHaveBeenCalledWith("/repo", "feature/old");
+  });
+
   it("collapses folders", async () => {
     const user = userEvent.setup();
     mockTree();

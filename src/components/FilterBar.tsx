@@ -1,3 +1,4 @@
+import { basename } from "../format";
 import {
   CHANGES_OPTIONS,
   SYNC_OPTIONS,
@@ -10,12 +11,27 @@ import {
 
 interface Props {
   filters: Filters;
+  directories: string[];
   onChange: (filters: Filters) => void;
 }
 
-export function FilterBar({ filters, onChange }: Props) {
+export function FilterBar({ filters, directories, onChange }: Props) {
   return (
     <div className="toolbar">
+      {directories.length > 1 && (
+        <select
+          aria-label="Filter by directory"
+          value={filters.directory}
+          onChange={(event) => onChange({ ...filters, directory: event.target.value })}
+        >
+          <option value="">All directories</option>
+          {directories.map((directory) => (
+            <option key={directory} value={directory}>
+              {basename(directory)}
+            </option>
+          ))}
+        </select>
+      )}
       <input
         type="search"
         aria-label="Search repositories"

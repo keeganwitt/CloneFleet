@@ -167,6 +167,30 @@ pub async fn load_branches(git: &mut Git) -> Result<Vec<RawBranch>, GitError> {
     Ok(parse_branch_refs(&output))
 }
 
+pub async fn branch_names(git: &mut Git) -> Result<Vec<String>, GitError> {
+    let mut names: Vec<String> = load_branches(git)
+        .await?
+        .into_iter()
+        .map(|b| b.name)
+        .collect();
+    if let Some(remote) = primary_remote(git).await? {
+        let prefix = format!("refs/remotes/{remote}/");
+        let remote_refs = git
+            .run_ok(&["for-each-ref", "--format=%(refname)", &prefix])
+            .await?;
+        names.extend(
+            remote_refs
+                .lines()
+                .filter_map(|r| r.strip_prefix(&prefix))
+                .filter(|name| *name != "HEAD")
+                .map(str::to_string),
+        );
+    }
+    names.sort();
+    names.dedup();
+    Ok(names)
+}
+
 pub async fn load_worktrees(git: &mut Git) -> Result<Vec<RawWorktree>, GitError> {
     let output = git.run_ok(&["worktree", "list", "--porcelain"]).await?;
     Ok(parse_worktrees(&output))
@@ -177,19 +201,25 @@ async fn ref_exists(git: &mut Git, reference: &str) -> Result<bool, GitError> {
         .await
 }
 
-pub async fn merge_bases(git: &mut Git, default: &DefaultBranch) -> Result<Vec<String>, GitError> {
+pub async fn merge_bases(
+    git: &mut Git,
+    default: &DefaultBranch,
+    mains: &[String],
+) -> Result<Vec<String>, GitError> {
     let mut remotes = vec![UPSTREAM_REMOTE.to_string()];
     remotes.extend(default.remote.clone());
     remotes.dedup();
     let mut bases = Vec::new();
-    for remote in remotes {
-        let candidate = format!("{remote}/{}", default.name);
-        if ref_exists(git, &format!("refs/remotes/{candidate}")).await? {
-            bases.push(candidate);
+    for main in mains {
+        for remote in &remotes {
+            let candidate = format!("{remote}/{main}");
+            if ref_exists(git, &format!("refs/remotes/{candidate}")).await? {
+                bases.push(candidate);
+            }
         }
-    }
-    if ref_exists(git, &format!("refs/heads/{}", default.name)).await? {
-        bases.push(default.name.clone());
+        if ref_exists(git, &format!("refs/heads/{main}")).await? {
+            bases.push(main.clone());
+        }
     }
     Ok(bases)
 }
@@ -277,11 +307,11 @@ async fn unique_commits(git: &mut Git, rev: &str, bases: &[String]) -> Option<u3
 
 pub fn protection(
     branch: &str,
-    default: Option<&str>,
+    mains: &[String],
     main_worktree_branch: Option<&str>,
     checked_out: &HashMap<String, PathBuf>,
 ) -> Option<Protection> {
-    if default == Some(branch) {
+    if mains.iter().any(|main| main == branch) {
         Some(Protection::Default)
     } else if main_worktree_branch == Some(branch) {
         Some(Protection::Current)
@@ -313,6 +343,7 @@ pub async fn fetch_remotes(git: &mut Git, warnings: &mut Vec<String>) -> Result<
 
 pub struct RepoContext {
     pub default: Option<DefaultBranch>,
+    pub mains: Vec<String>,
     pub bases: Vec<String>,
     pub branches: Vec<RawBranch>,
     pub worktrees: Vec<RawWorktree>,
@@ -321,12 +352,17 @@ pub struct RepoContext {
 impl RepoContext {
     pub async fn load(git: &mut Git) -> Result<Self, GitError> {
         let default = default_branch(git).await?;
+        let mains = match &default {
+            Some(default) => git.branch_settings().main_branches(&default.name),
+            None => git.branch_settings().additional.clone(),
+        };
         let bases = match &default {
-            Some(default) => merge_bases(git, default).await?,
+            Some(default) => merge_bases(git, default, &mains).await?,
             None => Vec::new(),
         };
         Ok(Self {
             default,
+            mains,
             bases,
             branches: load_branches(git).await?,
             worktrees: load_worktrees(git).await?,
@@ -348,7 +384,7 @@ impl RepoContext {
     pub fn protection(&self, branch: &str) -> Option<Protection> {
         protection(
             branch,
-            self.default.as_ref().map(|d| d.name.as_str()),
+            &self.mains,
             self.main_worktree().and_then(|w| w.branch.as_deref()),
             &self.checked_out(),
         )
@@ -504,8 +540,10 @@ prunable gitdir file points to non-existent location
     #[test]
     fn protects_default_current_and_checked_out_branches() {
         let checked_out = HashMap::from([("wt".to_string(), PathBuf::from("/wt"))]);
-        let check = |b| protection(b, Some("main"), Some("current"), &checked_out);
+        let mains = vec!["main".to_string(), "2.x".to_string()];
+        let check = |b| protection(b, &mains, Some("current"), &checked_out);
         assert_eq!(check("main"), Some(Protection::Default));
+        assert_eq!(check("2.x"), Some(Protection::Default));
         assert_eq!(check("current"), Some(Protection::Current));
         assert_eq!(check("wt"), Some(Protection::CheckedOutInWorktree));
         assert_eq!(check("other"), None);

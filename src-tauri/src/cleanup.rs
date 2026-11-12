@@ -395,6 +395,59 @@ mod tests {
         assert!(!branch_exists(&fixture, "open"));
     }
 
+    #[tokio::test]
+    async fn honors_configured_main_branches() {
+        use crate::actions::{Action, Outcome as ActionOutcome, run_action, summarize};
+        use crate::store::BranchSettings;
+
+        let fixture = Fixture::new();
+        let work = &fixture.work;
+        for branch in ["dev", "2.x"] {
+            fixture.git(work, &["switch", "--quiet", "-c", branch, "main"]);
+            fixture.git(work, &["push", "--quiet", "-u", "origin", branch]);
+        }
+        feature_branch(&fixture, "backport", "backport.txt");
+        fixture.git(work, &["switch", "--quiet", "2.x"]);
+        fixture.git(
+            work,
+            &[
+                "merge",
+                "--quiet",
+                "--no-ff",
+                "-m",
+                "merge backport",
+                "backport",
+            ],
+        );
+        fixture.git(work, &["push", "--quiet", "origin", "2.x"]);
+        fixture.git(work, &["switch", "--quiet", "-c", "elsewhere", "main"]);
+        let settings = BranchSettings {
+            primary: Some("dev".into()),
+            additional: vec!["2.x".into()],
+        };
+        let git = || Git::with_settings(work, settings.clone());
+
+        let summary = summarize(&mut git()).await.unwrap();
+        assert_eq!(summary.default_branch.as_deref(), Some("dev"));
+        assert_eq!(summary.main_branches, vec!["dev", "2.x"]);
+        assert!(summary.default_overridden);
+
+        let report = analyze(&mut git(), false).await.unwrap();
+        assert_eq!(branch(&report, "dev").protection, Some(Protection::Default));
+        assert_eq!(branch(&report, "2.x").protection, Some(Protection::Default));
+        assert_eq!(branch(&report, "main").protection, None);
+        assert_eq!(
+            branch(&report, "backport").merged,
+            Some(Merged {
+                evidence: MergeEvidence::Ancestor,
+                base: "origin/2.x".into()
+            })
+        );
+
+        let result = run_action(git(), &Action::CheckoutDefault).await;
+        assert_eq!(result.outcome, ActionOutcome::succeeded("Switched to dev"));
+    }
+
     fn add_worktree(fixture: &Fixture, branch: &str) -> PathBuf {
         let path = fixture.root().join(format!("wt-{branch}"));
         fixture.git(
