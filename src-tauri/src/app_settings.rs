@@ -5,6 +5,8 @@ use std::process::Stdio;
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
+use crate::launch::LaunchTarget;
+
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum Theme {
@@ -21,6 +23,16 @@ pub struct AppSettings {
     pub theme: Theme,
     pub reopen_last: bool,
     pub remember_recent: bool,
+    pub terminal: Option<LaunchTarget>,
+    pub editor: Option<LaunchTarget>,
+    pub web_hosts: Vec<WebHost>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WebHost {
+    pub host: String,
+    pub web_url: String,
 }
 
 impl Default for AppSettings {
@@ -30,6 +42,9 @@ impl Default for AppSettings {
             theme: Theme::System,
             reopen_last: true,
             remember_recent: true,
+            terminal: None,
+            editor: None,
+            web_hosts: Vec::new(),
         }
     }
 }

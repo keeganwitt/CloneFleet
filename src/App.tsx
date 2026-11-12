@@ -466,6 +466,7 @@ function App() {
         <RepoDetailPanel
           path={detail.path}
           summary={state.repos[detail.path].summary}
+          webHosts={settings.view?.settings.webHosts}
           tab={detail.tab}
           branch={detail.branch}
           onTabChange={(tab) => setDetail({ ...detail, tab })}

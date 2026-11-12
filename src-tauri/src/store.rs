@@ -105,6 +105,7 @@ mod tests {
                 theme: crate::app_settings::Theme::Dark,
                 reopen_last: false,
                 remember_recent: false,
+                ..AppSettings::default()
             },
         };
         config.save(&path).unwrap();

@@ -217,7 +217,22 @@ export interface AppSettings {
   theme: Theme;
   reopenLast: boolean;
   rememberRecent: boolean;
+  terminal: LaunchTarget | null;
+  editor: LaunchTarget | null;
+  webHosts: WebHost[];
 }
+
+export interface LaunchTarget {
+  app: string;
+  args: string;
+}
+
+export interface WebHost {
+  host: string;
+  webUrl: string;
+}
+
+export type OpenTarget = "fileManager" | "terminal" | "editor";
 
 export interface GitInfo {
   path: string | null;

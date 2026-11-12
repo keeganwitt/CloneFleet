@@ -8,6 +8,7 @@ mod discovery;
 mod fork;
 mod git;
 mod health;
+mod launch;
 mod remote_health;
 mod remotes;
 mod status;
@@ -172,6 +173,44 @@ async fn set_settings(
         }
     })?;
     Ok(state.settings_view().await)
+}
+
+#[tauri::command]
+fn open_repo(
+    path: PathBuf,
+    target: launch::OpenTarget,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state.ensure_known(&path)?;
+    let settings = state.config.lock().unwrap().settings.clone();
+    let platform = launch::Platform::current();
+    let plan = match target {
+        launch::OpenTarget::FileManager => {
+            return tauri_plugin_opener::open_path(&path, None::<&str>).map_err(|e| e.to_string());
+        }
+        launch::OpenTarget::Terminal => match &settings.terminal {
+            Some(terminal) => launch::plan_launch(terminal, &path, platform),
+            None => launch::default_terminal(
+                &path,
+                platform,
+                std::env::var_os("PATH").as_ref(),
+                std::env::var_os("TERMINAL"),
+            ),
+        },
+        launch::OpenTarget::Editor => match &settings.editor {
+            Some(editor) => launch::plan_launch(editor, &path, platform),
+            None => return Err("Choose an editor in Settings first".into()),
+        },
+    };
+    launch::spawn(&plan).map_err(|e| format!("Could not start {}: {e}", plan.program.display()))
+}
+
+#[tauri::command]
+fn open_web(url: String) -> Result<(), String> {
+    if !launch::is_web_url(&url) {
+        return Err(format!("Not a web address: {url}"));
+    }
+    tauri_plugin_opener::open_url(&url, None::<&str>).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -490,6 +529,8 @@ pub fn run() {
             set_settings,
             check_git,
             save_text_file,
+            open_repo,
+            open_web,
             load_workspace,
             open_directories,
             open_recent,

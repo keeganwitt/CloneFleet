@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   findAndReplace,
+  formatWebHosts,
+  parseWebHosts,
+  webUrl,
   httpsToSsh,
   parseRemoteUrl,
   planUrlChanges,
@@ -63,5 +66,35 @@ describe("planUrlChanges", () => {
     expect(planUrlChanges(rows, httpsToSsh)).toEqual([
       { ...rows[0], newUrl: "git@github.com:org/a.git" },
     ]);
+  });
+});
+
+describe("webUrl", () => {
+  it("derives a web address from any remote form, including private GitLab subgroups", () => {
+    expect(webUrl("git@github.com:org/repo.git", [])).toBe("https://github.com/org/repo");
+    expect(webUrl("ssh://git@gitlab.corp.example:2222/group/sub/repo.git", [])).toBe(
+      "https://gitlab.corp.example/group/sub/repo",
+    );
+    expect(webUrl("https://gitlab.corp.example/group/repo/", [])).toBe(
+      "https://gitlab.corp.example/group/repo",
+    );
+    expect(webUrl("/srv/git/repo.git", [])).toBeNull();
+  });
+
+  it("maps SSH aliases and odd hosts to their web base URL", () => {
+    const hosts = parseWebHosts(
+      "gitlab-work = https://gitlab.example.com/\nbroken line\nssh.git.example.com = https://example.com/gitlab",
+    );
+    expect(hosts).toEqual([
+      { host: "gitlab-work", webUrl: "https://gitlab.example.com/" },
+      { host: "ssh.git.example.com", webUrl: "https://example.com/gitlab" },
+    ]);
+    expect(webUrl("git@gitlab-work:team/app.git", hosts)).toBe(
+      "https://gitlab.example.com/team/app",
+    );
+    expect(webUrl("git@ssh.git.example.com:a/b.git", hosts)).toBe("https://example.com/gitlab/a/b");
+    expect(formatWebHosts(hosts)).toBe(
+      "gitlab-work = https://gitlab.example.com/\nssh.git.example.com = https://example.com/gitlab",
+    );
   });
 });

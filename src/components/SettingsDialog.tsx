@@ -1,6 +1,55 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { AppSettings, GitInfo, SettingsView, Theme } from "../types";
+import { formatWebHosts, parseWebHosts } from "../remoteUrls";
+import type { AppSettings, GitInfo, LaunchTarget, SettingsView, Theme } from "../types";
+
+interface LaunchFieldProps {
+  label: string;
+  value: LaunchTarget;
+  argsPlaceholder: string;
+  fallback: string;
+  onChange: (value: LaunchTarget) => void;
+}
+
+function LaunchField({ label, value, argsPlaceholder, fallback, onChange }: LaunchFieldProps) {
+  const browse = async () => {
+    const picked = await api.pickApp();
+    if (picked) onChange({ ...value, app: picked });
+  };
+  return (
+    <div className="launch-field">
+      <div className="toolbar">
+        <span className="launch-label">{label}</span>
+        <input
+          type="text"
+          aria-label={`${label} application`}
+          placeholder={fallback}
+          value={value.app}
+          onChange={(event) => onChange({ ...value, app: event.target.value })}
+        />
+        <button onClick={browse} aria-label={`Choose ${label.toLowerCase()} application`}>
+          Choose…
+        </button>
+      </div>
+      {value.app.trim() && (
+        <div className="toolbar">
+          <span className="launch-label" />
+          <input
+            type="text"
+            aria-label={`${label} arguments`}
+            placeholder={argsPlaceholder}
+            value={value.args}
+            onChange={(event) => onChange({ ...value, args: event.target.value })}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function toTarget(value: LaunchTarget): LaunchTarget | null {
+  return value.app.trim() ? { app: value.app.trim(), args: value.args.trim() } : null;
+}
 
 const THEMES: [Theme, string][] = [
   ["system", "System"],
@@ -20,6 +69,13 @@ export function SettingsDialog({ view, onSave, onClose }: Props) {
   const [theme, setTheme] = useState<Theme>(view.settings.theme);
   const [reopenLast, setReopenLast] = useState(view.settings.reopenLast);
   const [rememberRecent, setRememberRecent] = useState(view.settings.rememberRecent);
+  const [terminal, setTerminal] = useState<LaunchTarget>(
+    view.settings.terminal ?? { app: "", args: "" },
+  );
+  const [editor, setEditor] = useState<LaunchTarget>(
+    view.settings.editor ?? { app: "", args: "{path}" },
+  );
+  const [webHosts, setWebHosts] = useState(formatWebHosts(view.settings.webHosts));
   const [check, setCheck] = useState<GitInfo>();
   const [error, setError] = useState<string>();
 
@@ -40,10 +96,14 @@ export function SettingsDialog({ view, onSave, onClose }: Props) {
   const save = async () => {
     try {
       await onSave({
+        ...view.settings,
         gitPath: custom && gitPath.trim() ? gitPath.trim() : null,
         theme,
         reopenLast,
         rememberRecent,
+        terminal: toTarget(terminal),
+        editor: toTarget(editor),
+        webHosts: parseWebHosts(webHosts),
       });
       onClose();
     } catch (failure) {
@@ -117,6 +177,37 @@ export function SettingsDialog({ view, onSave, onClose }: Props) {
           {!rememberRecent && view.settings.rememberRecent && (
             <p className="muted">Saving clears the current recent list.</p>
           )}
+        </fieldset>
+        <fieldset>
+          <legend>Open in</legend>
+          <LaunchField
+            label="Terminal"
+            value={terminal}
+            argsPlaceholder="Arguments (optional), e.g. --working-directory={path}"
+            fallback="System default terminal"
+            onChange={setTerminal}
+          />
+          <LaunchField
+            label="Editor"
+            value={editor}
+            argsPlaceholder="Arguments, default {path}"
+            fallback="Not set"
+            onChange={setEditor}
+          />
+          <p className="muted">
+            Apps start in the repository&apos;s folder. <code>{"{path}"}</code> in the arguments is
+            replaced with the repository path.
+          </p>
+          <label className="web-hosts">
+            Web addresses for hosts that differ from their remote
+            <textarea
+              aria-label="Web host mappings"
+              rows={2}
+              placeholder="gitlab-work = https://gitlab.example.com"
+              value={webHosts}
+              onChange={(event) => setWebHosts(event.target.value)}
+            />
+          </label>
         </fieldset>
         <fieldset>
           <legend>Theme</legend>

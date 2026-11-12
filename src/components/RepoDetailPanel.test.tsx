@@ -97,6 +97,13 @@ function mockBackend(settings: BranchSettings = { primary: null, additional: [] 
         return ["2.x", "dev", "feature", "main"];
       case "set_branch_settings":
         return null;
+      case "list_remotes":
+        return [{ name: "origin", fetchUrl: "git@gitlab-work:team/repo.git", pushUrl: null }];
+      case "open_repo":
+        if (args.target === "editor") throw "Choose an editor in Settings first";
+        return null;
+      case "open_web":
+        return null;
       default:
         throw new Error(`unexpected ${cmd}`);
     }
@@ -111,6 +118,7 @@ function Harness({ initialTab, initialBranch }: { initialTab: DetailTab; initial
     <RepoDetailPanel
       path="/src/repo"
       summary={summary}
+      webHosts={[{ host: "gitlab-work", webUrl: "https://gitlab.example.com" }]}
       tab={tab}
       branch={branchName}
       onTabChange={setTab}
@@ -198,6 +206,28 @@ describe("RepoDetailPanel", () => {
         settings: { primary: null, additional: [] },
       }),
     );
+  });
+
+  it("opens the repository in other apps and on the web", async () => {
+    const user = userEvent.setup();
+    const calls = mockBackend();
+    render(<Harness initialTab="changes" />);
+    const open = screen.getByRole("group", { name: "Open in" });
+    await user.click(within(open).getByRole("button", { name: "Terminal" }));
+    await waitFor(() => expect(within(open).getByRole("button", { name: "Web" })).toBeEnabled());
+    await user.click(within(open).getByRole("button", { name: "Web" }));
+    await user.click(within(open).getByRole("button", { name: "Editor" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Choose an editor in Settings first",
+    );
+    expect(calls.filter((c) => c.cmd === "open_repo").map((c) => c.args)).toEqual([
+      { path: "/src/repo", target: "terminal" },
+      { path: "/src/repo", target: "editor" },
+    ]);
+    expect(calls.find((c) => c.cmd === "open_web")?.args).toEqual({
+      url: "https://gitlab.example.com/team/repo",
+    });
   });
 
   it("switches tabs", async () => {

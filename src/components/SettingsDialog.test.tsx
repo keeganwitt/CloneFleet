@@ -7,7 +7,15 @@ import { applyTheme } from "../useSettings";
 import { SettingsDialog } from "./SettingsDialog";
 
 const view: SettingsView = {
-  settings: { gitPath: null, theme: "system", reopenLast: true, rememberRecent: true },
+  settings: {
+    gitPath: null,
+    theme: "system",
+    reopenLast: true,
+    rememberRecent: true,
+    terminal: null,
+    editor: null,
+    webHosts: [],
+  },
   detectedGit: "/opt/homebrew/bin/git",
   activeGit: { path: "/opt/homebrew/bin/git", version: "git version 2.56.0", error: null },
 };
@@ -44,12 +52,7 @@ describe("SettingsDialog", () => {
     await user.click(screen.getByRole("radio", { name: "Dark" }));
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(onSave).toHaveBeenCalledWith({
-      gitPath: null,
-      theme: "dark",
-      reopenLast: true,
-      rememberRecent: true,
-    });
+    expect(onSave).toHaveBeenCalledWith({ ...view.settings, theme: "dark" });
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -66,12 +69,7 @@ describe("SettingsDialog", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("git version 2.40.0");
 
     await user.click(screen.getByRole("button", { name: "Save" }));
-    expect(onSave).toHaveBeenCalledWith({
-      gitPath: "/custom/git",
-      theme: "system",
-      reopenLast: true,
-      rememberRecent: true,
-    });
+    expect(onSave).toHaveBeenCalledWith({ ...view.settings, gitPath: "/custom/git" });
   });
 
   it("shows a failing test and a rejected save", async () => {
@@ -100,10 +98,36 @@ describe("SettingsDialog", () => {
     expect(screen.getByText("Saving clears the current recent list.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(onSave).toHaveBeenCalledWith({
-      gitPath: null,
-      theme: "system",
+      ...view.settings,
       reopenLast: false,
       rememberRecent: false,
+    });
+  });
+
+  it("saves terminal, editor, and web host preferences", async () => {
+    const user = userEvent.setup();
+    mockIPC((cmd) => {
+      if (cmd === "plugin:dialog|open") return "/Applications/Zed.app";
+      throw new Error(`unexpected ${cmd}`);
+    });
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsDialog view={view} onSave={onSave} onClose={() => {}} />);
+
+    await user.type(screen.getByLabelText("Terminal application"), "/Applications/Ghostty.app");
+    await user.type(screen.getByLabelText("Terminal arguments"), "--working-directory={{path}");
+    await user.click(screen.getByRole("button", { name: "Choose editor application" }));
+    expect(screen.getByLabelText("Editor application")).toHaveValue("/Applications/Zed.app");
+    await user.type(
+      screen.getByLabelText("Web host mappings"),
+      "gitlab-work = https://gitlab.example.com",
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onSave).toHaveBeenCalledWith({
+      ...view.settings,
+      terminal: { app: "/Applications/Ghostty.app", args: "--working-directory={path}" },
+      editor: { app: "/Applications/Zed.app", args: "{path}" },
+      webHosts: [{ host: "gitlab-work", webUrl: "https://gitlab.example.com" }],
     });
   });
 

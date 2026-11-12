@@ -8,8 +8,11 @@ import type {
   BranchSettings,
   FileChange,
   FileDiff,
+  OpenTarget,
   RepoSummary,
+  WebHost,
 } from "../types";
+import { webUrl } from "../remoteUrls";
 import { useNow } from "../useNow";
 import { ChangesPanel } from "./ChangesPanel";
 import { DiffView, FileDiffList, changeCounts } from "./DiffView";
@@ -50,6 +53,7 @@ function useLoad<T>(load: () => Promise<T>, deps: unknown[]): Loadable<T> {
 interface Props {
   path: string;
   summary: RepoSummary | undefined;
+  webHosts?: WebHost[];
   tab: DetailTab;
   branch?: string;
   onTabChange: (tab: DetailTab) => void;
@@ -74,6 +78,7 @@ export function RepoDetailPanel(props: Props) {
           ×
         </button>
       </div>
+      <OpenButtons path={props.path} webHosts={props.webHosts ?? []} />
       <div className="tabs" role="tablist">
         {TABS.map(([tab, label]) => (
           <button
@@ -106,6 +111,50 @@ export function RepoDetailPanel(props: Props) {
         )}
       </div>
     </aside>
+  );
+}
+
+const OPEN_TARGETS: [OpenTarget, string][] = [
+  ["fileManager", "Files"],
+  ["terminal", "Terminal"],
+  ["editor", "Editor"],
+];
+
+function OpenButtons({ path, webHosts }: { path: string; webHosts: WebHost[] }) {
+  const remotes = useLoad(() => api.listRemotes(path), [path]);
+  const [error, setError] = useState<string>();
+  const primary =
+    remotes.status === "loaded"
+      ? (remotes.value.find((r) => r.name === "origin") ?? remotes.value[0])
+      : undefined;
+  const web = primary ? webUrl(primary.fetchUrl, webHosts) : null;
+  const run = (open: () => Promise<void>) => {
+    setError(undefined);
+    open().catch((failure) => setError(errorMessage(failure)));
+  };
+  return (
+    <>
+      <div className="toolbar open-buttons" role="group" aria-label="Open in">
+        <span className="muted">Open in</span>
+        {OPEN_TARGETS.map(([target, label]) => (
+          <button key={target} onClick={() => run(() => api.openRepo(path, target))}>
+            {label}
+          </button>
+        ))}
+        <button
+          disabled={!web}
+          title={web ?? "No remote with a web address"}
+          onClick={() => web && run(() => api.openWeb(web))}
+        >
+          Web
+        </button>
+      </div>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+    </>
   );
 }
 

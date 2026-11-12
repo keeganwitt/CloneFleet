@@ -84,7 +84,15 @@ function mockBackend(backend: Backend) {
         };
       case "get_settings":
         return {
-          settings: { gitPath: null, theme: "system", reopenLast: true, rememberRecent: true },
+          settings: {
+            gitPath: null,
+            theme: "system",
+            reopenLast: true,
+            rememberRecent: true,
+            terminal: null,
+            editor: null,
+            webHosts: [],
+          },
           detectedGit: "/usr/bin/git",
           activeGit: backend.gitError
             ? { path: null, version: null, error: backend.gitError }

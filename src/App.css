@@ -736,3 +736,31 @@ input.days {
   white-space: pre-wrap;
   font-size: 12px;
 }
+
+.launch-label {
+  min-width: 64px;
+}
+
+.launch-field input[type="text"] {
+  flex: 1;
+}
+
+.web-hosts {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.web-hosts textarea {
+  font: inherit;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+}
+
+.open-buttons {
+  margin-bottom: 6px;
+}

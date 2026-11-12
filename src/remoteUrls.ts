@@ -79,3 +79,27 @@ export function planUrlChanges(rows: RemoteRow[], transform: UrlTransform): UrlC
     return newUrl && newUrl !== row.url ? [{ ...row, newUrl }] : [];
   });
 }
+
+export function webUrl(
+  remoteUrl: string,
+  hosts: { host: string; webUrl: string }[],
+): string | null {
+  const parsed = parseRemoteUrl(remoteUrl);
+  if (!parsed) return null;
+  const path = parsed.path.replace(/\.git$/, "").replace(/\/+$/, "");
+  const mapping = hosts.find((h) => h.host.trim().toLowerCase() === parsed.host.toLowerCase());
+  const base = mapping ? mapping.webUrl.trim().replace(/\/+$/, "") : `https://${parsed.host}`;
+  return `${base}/${path}`;
+}
+
+export function parseWebHosts(text: string): { host: string; webUrl: string }[] {
+  return text
+    .split("\n")
+    .map((line) => line.split("="))
+    .filter((parts) => parts.length === 2 && parts[0].trim() && parts[1].trim())
+    .map(([host, url]) => ({ host: host.trim(), webUrl: url.trim() }));
+}
+
+export function formatWebHosts(hosts: { host: string; webUrl: string }[]): string {
+  return hosts.map((h) => `${h.host} = ${h.webUrl}`).join("\n");
+}

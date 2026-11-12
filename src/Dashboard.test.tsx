@@ -50,7 +50,15 @@ function mockFleet() {
     switch (cmd) {
       case "get_settings":
         return {
-          settings: { gitPath: null, theme: "system", reopenLast: true, rememberRecent: true },
+          settings: {
+            gitPath: null,
+            theme: "system",
+            reopenLast: true,
+            rememberRecent: true,
+            terminal: null,
+            editor: null,
+            webHosts: [],
+          },
           detectedGit: "/usr/bin/git",
           activeGit: { path: "/usr/bin/git", version: "git version 2.56.0", error: null },
         };

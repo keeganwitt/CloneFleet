@@ -4,6 +4,7 @@ import type {
   Action,
   AppSettings,
   GitInfo,
+  OpenTarget,
   SettingsView,
   ActionResult,
   BranchDiff,
@@ -69,6 +70,12 @@ export const api = {
     if (!path) return false;
     await invoke<void>("save_text_file", { path, contents });
     return true;
+  },
+  openRepo: (path: string, target: OpenTarget) => invoke<void>("open_repo", { path, target }),
+  openWeb: (url: string) => invoke<void>("open_web", { url }),
+  pickApp: async (): Promise<string | null> => {
+    const picked = await open({ directory: false, multiple: false });
+    return typeof picked === "string" ? picked : null;
   },
   confirmDestructive: (message: string, okLabel: string) =>
     confirm(message, { title: "Confirm", kind: "warning", okLabel, cancelLabel: "Cancel" }),
