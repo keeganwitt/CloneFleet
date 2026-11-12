@@ -1,6 +1,6 @@
 [package]
 name = "clonefleet"
-version = "0.1.0"
+version = "1.0.0"
 description = "Run git maintenance actions across many repositories at once"
 authors = ["Keegan Witt"]
 license = "MIT"
