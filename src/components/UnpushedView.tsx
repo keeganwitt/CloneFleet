@@ -35,6 +35,22 @@ function plural(count: number, singular: string, pluralForm = `${singular}s`): s
   return `${count} ${count === 1 ? singular : pluralForm}`;
 }
 
+const DAY_SECONDS = 24 * 60 * 60;
+
+export function olderThan(
+  report: UnpushedReport,
+  nowUnix: number,
+  minAgeDays: number | null,
+): UnpushedReport {
+  if (minAgeDays === null) return report;
+  const cutoff = nowUnix - minAgeDays * DAY_SECONDS;
+  return {
+    ...report,
+    branches: report.branches.filter((b) => b.lastCommitUnix <= cutoff),
+    stashes: report.stashes.filter((s) => s.createdUnix <= cutoff),
+  };
+}
+
 export function hasUnpushedWork(report: UnpushedReport): boolean {
   return (
     report.branches.length > 0 || report.stashes.length > 0 || report.dirtyWorktrees.length > 0
@@ -71,6 +87,8 @@ export function describeUnpushedBranch(branch: UnpushedBranch): string {
 export function UnpushedView({ paths, onClose, onChanged }: Props) {
   const [fetchFirst, setFetchFirst] = useState(true);
   const [hideClean, setHideClean] = useState(true);
+  const [ageFilter, setAgeFilter] = useState(false);
+  const [minAgeDays, setMinAgeDays] = useState(30);
   const [reports, setReports] = useState<Record<string, RepoUnpushed>>(() =>
     Object.fromEntries(paths.map((repo) => [repo, { status: "loading" }])),
   );
@@ -104,8 +122,14 @@ export function UnpushedView({ paths, onClose, onChanged }: Props) {
     );
   };
 
-  const loaded = paths.flatMap((repo) => {
+  const shownEntry = (repo: string): RepoUnpushed | undefined => {
     const entry = reports[repo];
+    return entry?.status === "loaded"
+      ? { ...entry, report: olderThan(entry.report, nowUnix, ageFilter ? minAgeDays : null) }
+      : entry;
+  };
+  const loaded = paths.flatMap((repo) => {
+    const entry = shownEntry(repo);
     return entry?.status === "loaded" ? [[repo, entry.report] as const] : [];
   });
   const withWork = loaded.filter(([, report]) => hasUnpushedWork(report)).length;
@@ -177,7 +201,7 @@ export function UnpushedView({ paths, onClose, onChanged }: Props) {
             ? `Analyzed ${loaded.length} of ${paths.length}…`
             : `${withWork} of ${plural(paths.length, "repository", "repositories")} ${
                 withWork === 1 ? "has" : "have"
-              } unpushed work`}
+              } unpushed work${ageFilter ? ` older than ${minAgeDays} days` : ""}`}
         </span>
         <label>
           <input
@@ -187,13 +211,33 @@ export function UnpushedView({ paths, onClose, onChanged }: Props) {
           />
           Hide repositories with nothing unpushed
         </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={ageFilter}
+            onChange={(event) => setAgeFilter(event.target.checked)}
+          />
+          Only older than
+        </label>
+        <span className="stale-days">
+          <input
+            type="number"
+            min={1}
+            className="days"
+            aria-label="Minimum age in days"
+            disabled={!ageFilter}
+            value={minAgeDays}
+            onChange={(event) => setMinAgeDays(Math.max(1, Number(event.target.value) || 1))}
+          />
+          days
+        </span>
         <button disabled={busy || stashTargets.length === 0} onClick={dropStashes}>
           Drop {plural(stashTargets.length, "stash", "stashes")}
         </button>
       </div>
 
       {paths.map((repo) => {
-        const entry = reports[repo];
+        const entry = shownEntry(repo);
         if (hideClean && entry?.status === "loaded" && !hasUnpushedWork(entry.report)) {
           return null;
         }

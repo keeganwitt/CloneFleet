@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { UnpushedBranch, UnpushedReport } from "../types";
-import { UnpushedView, describeUnpushedBranch, summarizeUnpushed } from "./UnpushedView";
+import { UnpushedView, describeUnpushedBranch, olderThan, summarizeUnpushed } from "./UnpushedView";
 
 const now = Math.floor(Date.now() / 1000);
 
@@ -53,6 +53,16 @@ describe("describeUnpushedBranch", () => {
       "2 commits on no remote (remote branch origin/squashed was deleted); " +
         "changes are already in origin/main (squash-merged)",
     );
+  });
+});
+
+describe("olderThan", () => {
+  it("keeps branches and stashes at least the given age, and all uncommitted changes", () => {
+    const filtered = olderThan(busy, now, 30);
+    expect(filtered.branches).toEqual([]);
+    expect(filtered.stashes.map((s) => s.sha)).toEqual(["s1"]);
+    expect(filtered.dirtyWorktrees).toEqual(["/busy"]);
+    expect(olderThan(busy, now, null)).toBe(busy);
   });
 });
 
@@ -143,6 +153,28 @@ describe("UnpushedView", () => {
       expect(calls.filter((c) => c.cmd === "plugin:dialog|message")).toHaveLength(1),
     );
     expect(calls.filter((c) => c.cmd === "drop_stashes")).toHaveLength(0);
+  });
+
+  it("filters to work older than a number of days", async () => {
+    const user = userEvent.setup();
+    mockBackend();
+    renderView();
+    await screen.findByText("local-only");
+    expect(screen.getByLabelText("Minimum age in days")).toBeDisabled();
+    await user.click(screen.getByLabelText("Only older than"));
+
+    expect(screen.queryByText("local-only")).not.toBeInTheDocument();
+    expect(screen.queryByText("On main: recent")).not.toBeInTheDocument();
+    expect(screen.getByText("WIP on main: old")).toBeInTheDocument();
+    expect(
+      screen.getByText("1 of 2 repositories has unpushed work older than 30 days"),
+    ).toBeInTheDocument();
+
+    const days = screen.getByLabelText("Minimum age in days");
+    await user.clear(days);
+    await user.type(days, "120");
+    expect(screen.queryByText("WIP on main: old")).not.toBeInTheDocument();
+    expect(screen.getByText("uncommitted changes")).toBeInTheDocument();
   });
 
   it("re-analyzes with or without fetching", async () => {
