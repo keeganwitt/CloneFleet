@@ -285,12 +285,24 @@ export function CleanupView({ paths, onChanged, onOpenBranch }: Props) {
             )}
           </Fragment>
         ))}
+        <label>
+          <input
+            type="checkbox"
+            checked={hideEmpty}
+            onChange={(event) => setHideEmpty(event.target.checked)}
+          />
+          Hide repositories with nothing to clean up
+        </label>
       </div>
 
       <div className="toolbar">
         <button disabled={busy || branchTargets.length === 0} onClick={deleteBranches}>
           Delete {plural(branchTargets.length, "branch", "branches")}
         </button>
+        <span className="muted">Branches checked out in a worktree are kept.</span>
+      </div>
+
+      <div className="toolbar">
         <button disabled={busy || worktreeTargets.length === 0} onClick={removeWorktrees}>
           Remove {plural(worktreeTargets.length, "worktree")}
         </button>
@@ -300,15 +312,7 @@ export function CleanupView({ paths, onChanged, onOpenBranch }: Props) {
             checked={deleteWorktreeBranches}
             onChange={(event) => setDeleteWorktreeBranches(event.target.checked)}
           />
-          Also delete merged worktree branches
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={hideEmpty}
-            onChange={(event) => setHideEmpty(event.target.checked)}
-          />
-          Hide repositories with nothing to clean up
+          and delete their branches if merged
         </label>
       </div>
 

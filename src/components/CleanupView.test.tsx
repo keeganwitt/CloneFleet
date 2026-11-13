@@ -277,7 +277,7 @@ describe("CleanupView", () => {
     const user = userEvent.setup();
     const calls = mockBackend();
     renderView();
-    await user.click(await screen.findByLabelText("Also delete merged worktree branches"));
+    await user.click(await screen.findByLabelText("and delete their branches if merged"));
     await user.click(screen.getByRole("button", { name: "Remove 1 worktree" }));
 
     expect(await screen.findByText("/wt/done: Removed worktree")).toBeInTheDocument();
