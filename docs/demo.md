@@ -64,10 +64,12 @@ cargo run --manifest-path src-tauri/Cargo.toml --example demo_home -- /tmp/clone
 1. Run `pnpm demo` and resize the window to 1400 × 860 points. Leave the theme on System, or switch it in Settings for a dark capture.
 2. Capture each screen. On macOS, `screencapture -o -l <window id> docs/screenshots/<name>.png` captures just the window (Screen Recording permission is required), or press ⇧⌘4, then Space, then ⌥-click the window.
 
-| File                                | Screen                                                                                |
-| ----------------------------------- | ------------------------------------------------------------------------------------- |
-| `docs/screenshots/overview.png`     | **Overview**, right after launch                                                      |
-| `docs/screenshots/repositories.png` | **Repositories**, with `api-gateway`, `billing-service`, and `design-system` selected |
-| `docs/screenshots/cleanup.png`      | **Branch cleanup**                                                                    |
-| `docs/screenshots/branch-diff.png`  | **Branch cleanup**, then click `eslint-9` to open its details on the **Branches** tab |
-| `docs/screenshots/remotes.png`      | **Remotes** after **Check all remotes**                                               |
+| File                                        | Screen                                                                                  |
+| ------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `docs/screenshots/overview.png`             | **Overview**, right after launch                                                        |
+| `docs/screenshots/repositories.png`         | **Repositories**, with `api-gateway`, `billing-service`, and `design-system` selected   |
+| `docs/screenshots/cleanup.png`              | **Branch cleanup**                                                                      |
+| `docs/screenshots/branch-diff.png`          | **Branch cleanup**, then click `eslint-9` to open its details on the **Branches** tab   |
+| `docs/screenshots/remotes.png`              | **Remotes** after **Check all remotes**                                                 |
+| `docs/screenshots/disk-cleanup.png`         | **Disk cleanup** with **Needs reinstalling** and **May not be reproducible** also shown |
+| `docs/screenshots/disk-cleanup-deleted.png` | The same, after **Delete 1 directory** removes the preselected `dist`                   |

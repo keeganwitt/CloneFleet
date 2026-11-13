@@ -94,6 +94,18 @@ describe("ArtifactsView", () => {
     expect(screen.getByRole("button", { name: "Delete 2 directories (4.0 MB)" })).toBeEnabled();
   });
 
+  it("explains each category next to its toggle", () => {
+    mockBackend();
+    renderView();
+
+    expect(
+      screen.getByRole("checkbox", { name: "Needs reinstalling" }),
+    ).toHaveAccessibleDescription(/Run the install step again before building/);
+    expect(
+      screen.getByRole("checkbox", { name: "May not be reproducible" }),
+    ).toHaveAccessibleDescription(/Python virtualenvs/);
+  });
+
   it("lists the other tiers unselected when their toggles are turned on", async () => {
     mockBackend();
     renderView();

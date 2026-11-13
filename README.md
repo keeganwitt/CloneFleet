@@ -37,12 +37,14 @@ Your fleet of Git clones, under one command. A cross-platform desktop app to kee
 
 ## Screenshots
 
-|                                                                                                                     |                                                                                                                                       |
-| ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| ![Repositories list with three selected and the action bar pinned to the bottom](docs/screenshots/repositories.png) | ![Branch and worktree cleanup with merged, squash-merged, remote-deleted, and stale branches in a tree](docs/screenshots/cleanup.png) |
-| **Repositories**: filter, sort, select, and run an action on many repositories at once.                             | **Branch & worktree cleanup**: merged branches are found even after squash and rebase merges.                                         |
-| ![A branch's commits and diff in the repository details panel](docs/screenshots/branch-diff.png)                    | ![Remotes page with each remote checked and a bulk URL editor](docs/screenshots/remotes.png)                                          |
-| **Branch details**: see what an unmerged branch contains before deleting it.                                        | **Remotes**: check every remote, fix moved ones, and rewrite URLs in bulk.                                                            |
+|                                                                                                                                 |                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| ![Repositories list with three selected and the action bar pinned to the bottom](docs/screenshots/repositories.png)             | ![Branch and worktree cleanup with merged, squash-merged, remote-deleted, and stale branches in a tree](docs/screenshots/cleanup.png) |
+| **Repositories**: filter, sort, select, and run an action on many repositories at once.                                         | **Branch & worktree cleanup**: merged branches are found even after squash and rebase merges.                                         |
+| ![A branch's commits and diff in the repository details panel](docs/screenshots/branch-diff.png)                                | ![Remotes page with each remote checked and a bulk URL editor](docs/screenshots/remotes.png)                                          |
+| **Branch details**: see what an unmerged branch contains before deleting it.                                                    | **Remotes**: check every remote, fix moved ones, and rewrite URLs in bulk.                                                            |
+| ![Disk cleanup listing dist, node_modules, a virtualenv, and .terraform with sizes and ages](docs/screenshots/disk-cleanup.png) | ![Disk cleanup after deleting dist, reporting the space freed](docs/screenshots/disk-cleanup-deleted.png)                             |
+| **Disk cleanup**: find build output, dependencies, and virtualenvs that git ignores, with their sizes.                          | **After deleting**: each result says what was removed and how much space it freed.                                                    |
 
 The screenshots use the made-up repositories from `pnpm demo`; see [docs/demo.md](docs/demo.md).
 

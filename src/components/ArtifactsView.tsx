@@ -193,10 +193,11 @@ export function ArtifactsView({ paths, scans, onRescan }: Props) {
           <label key={tier.value}>
             <input
               type="checkbox"
+              aria-describedby={`tier-hint-${tier.value}`}
               checked={shown.has(tier.value)}
               onChange={() => toggleTier(tier.value)}
             />
-            <span title={tier.hint}>{tier.label}</span>
+            {tier.label}
           </label>
         ))}
         <label>
@@ -208,6 +209,14 @@ export function ArtifactsView({ paths, scans, onRescan }: Props) {
           Hide repositories with nothing to clean up
         </label>
       </div>
+
+      <ul className="muted hint tier-hints">
+        {ARTIFACT_TIERS.map((tier) => (
+          <li key={tier.value} id={`tier-hint-${tier.value}`}>
+            <strong>{tier.label}:</strong> {tier.hint}
+          </li>
+        ))}
+      </ul>
 
       <div className="toolbar">
         <button disabled={busy || targets.length === 0} onClick={deleteSelected}>

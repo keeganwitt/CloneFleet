@@ -1,16 +1,20 @@
 import type { Artifact, ArtifactTier } from "./types";
 
 export const ARTIFACT_TIERS: { value: ArtifactTier; label: string; hint: string }[] = [
-  { value: "buildOutput", label: "Build output", hint: "Recreated by the next build" },
+  {
+    value: "buildOutput",
+    label: "Build output",
+    hint: "Compiled files and caches, such as target, dist, and __pycache__. The next build or test run recreates them.",
+  },
   {
     value: "reinstall",
     label: "Needs reinstalling",
-    hint: "Run the install or build again, for example npm install or gradle build",
+    hint: "Downloaded dependencies and tool state, such as node_modules, .gradle, and .terraform. Run the install step again before building, for example npm install or terraform init.",
   },
   {
     value: "unreproducible",
     label: "May not be reproducible",
-    hint: "Python virtualenvs can hold packages installed by hand",
+    hint: "Python virtualenvs. Packages installed into one by hand aren't recorded anywhere, so recreating it can miss some.",
   },
 ];
 
