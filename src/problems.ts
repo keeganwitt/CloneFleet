@@ -1,3 +1,4 @@
+import { formatBytes } from "./artifacts";
 import type { RepoState } from "./state";
 import type { RepoHealth } from "./types";
 
@@ -16,11 +17,12 @@ export type ProblemKind =
   | "mergedBranches"
   | "staleBranches"
   | "removableWorktrees"
-  | "staleWorktrees";
+  | "staleWorktrees"
+  | "reclaimableSpace";
 
 export type Section = "attention" | "updates" | "work" | "housekeeping";
 export type Severity = "danger" | "warning" | "neutral";
-export type Fix = "pull" | "checkoutDefault" | "reviewUnpushed" | "cleanup";
+export type Fix = "pull" | "checkoutDefault" | "reviewUnpushed" | "cleanup" | "cleanArtifacts";
 
 interface ProblemInfo {
   section: Section;
@@ -118,6 +120,12 @@ export const PROBLEMS: Record<ProblemKind, ProblemInfo> = {
     title: (n, items) =>
       `${items} stale unmerged ${items === 1 ? "worktree" : "worktrees"} in ${repos(n)}`,
   },
+  reclaimableSpace: {
+    section: "housekeeping",
+    severity: "neutral",
+    fix: "cleanArtifacts",
+    title: (n, bytes) => `${formatBytes(bytes)} of build and dependency directories in ${repos(n)}`,
+  },
 };
 
 export const SECTIONS: [Section, string][] = [
@@ -129,7 +137,11 @@ export const SECTIONS: [Section, string][] = [
 
 const ORDER = Object.keys(PROBLEMS) as ProblemKind[];
 
-export function repoProblems(repo: RepoState, health?: RepoHealth): [ProblemKind, number][] {
+export function repoProblems(
+  repo: RepoState,
+  health?: RepoHealth,
+  reclaimable?: number,
+): [ProblemKind, number][] {
   const found: [ProblemKind, number][] = [];
   const outcome = repo.runningAction === undefined ? repo.result?.outcome : undefined;
   if (outcome?.status === "failed" && outcome.reason) {
@@ -162,6 +174,7 @@ export function repoProblems(repo: RepoState, health?: RepoHealth): [ProblemKind
     }
     if (health.staleWorktrees > 0) found.push(["staleWorktrees", health.staleWorktrees]);
   }
+  if (reclaimable) found.push(["reclaimableSpace", reclaimable]);
   return found;
 }
 
@@ -181,6 +194,7 @@ export function buildOverview(
   paths: string[],
   states: Record<string, RepoState>,
   healths: Record<string, RepoHealth | undefined>,
+  reclaimable: Record<string, number | undefined> = {},
 ): Overview {
   const cards = new Map<ProblemKind, Card>();
   const needsAttention: string[] = [];
@@ -188,7 +202,7 @@ export function buildOverview(
   for (const path of paths) {
     const repo = states[path];
     if (!repo) continue;
-    const problems = repoProblems(repo, healths[path]);
+    const problems = repoProblems(repo, healths[path], reclaimable[path]);
     for (const [kind, items] of problems) {
       const card = cards.get(kind) ?? { kind, paths: [], items: 0 };
       card.paths.push(path);

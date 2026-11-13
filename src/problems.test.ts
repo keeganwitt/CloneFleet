@@ -118,6 +118,20 @@ describe("buildOverview", () => {
   });
 });
 
+describe("reclaimable space", () => {
+  it("adds a housekeeping card totalling bytes without affecting health", () => {
+    const states = { "/a": repo("/a"), "/b": repo("/b"), "/c": repo("/c") };
+    const overview = buildOverview(Object.keys(states), states, {}, { "/a": 2_000, "/b": 0 });
+    expect(overview.cards.map((c) => [c.kind, c.paths, c.items])).toEqual([
+      ["reclaimableSpace", ["/a"], 2_000],
+    ]);
+    expect(overview.healthy).toEqual(["/a", "/b", "/c"]);
+    expect(PROBLEMS.reclaimableSpace.title(1, 2_500_000)).toBe(
+      "2.5 MB of build and dependency directories in 1 repository",
+    );
+  });
+});
+
 describe("problem titles", () => {
   it("pluralize repositories and items", () => {
     expect(PROBLEMS.behind.title(1, 1)).toBe("1 repository behind upstream");

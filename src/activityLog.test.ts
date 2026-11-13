@@ -86,6 +86,18 @@ describe("activity log", () => {
     expect(text).toContain("/b — Pull: failed\nboom\n  $ git pull  (exit 1)\n    err");
   });
 
+  it("writes filesystem commands without a git prefix", () => {
+    recordAction(
+      "/r",
+      "Delete build and dependency directories",
+      { status: "succeeded", message: "Deleted" },
+      [{ ...command(["delete", "/r/node_modules"]), kind: "filesystem" }, command(["ls-files"])],
+    );
+    const text = formatLog(logSnapshot());
+    expect(text).toContain("  $ delete /r/node_modules  (exit 0)");
+    expect(text).toContain("  $ git ls-files  (exit 0)");
+  });
+
   it("summarizes cleanup item results", () => {
     expect(
       summarizeItems([

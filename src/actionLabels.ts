@@ -45,4 +45,8 @@ export const SKIP_REASON_LABELS: Record<SkipReason, string> = {
   noRemote: "no remote",
   alreadyExists: "already exists",
   cancelled: "cancelled",
+  notIgnored: "not ignored by git",
+  notArtifact: "not a build directory",
+  containsRepository: "contains a repository",
+  tierHidden: "category not shown",
 };

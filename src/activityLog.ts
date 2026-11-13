@@ -43,6 +43,11 @@ export function recordAction(
   emit();
 }
 
+export function commandText(command: CommandRecord): string {
+  const text = command.args.join(" ");
+  return command.kind === "filesystem" ? text : `git ${text}`;
+}
+
 export function summarizeItems(items: { status: EntryStatus; message: string }[]): {
   status: EntryStatus;
   message: string;
@@ -80,7 +85,7 @@ export function matchesLogSearch(entry: LogEntry, search: string): boolean {
     entry.repo,
     entry.label,
     entry.message,
-    ...entry.commands.flatMap((c) => [c.args.join(" "), c.stdout, c.stderr]),
+    ...entry.commands.flatMap((c) => [commandText(c), c.stdout, c.stderr]),
   ]
     .join("\n")
     .toLowerCase();
@@ -95,8 +100,9 @@ export function formatLog(list: LogEntry[]): string {
         `[${new Date(entry.timeMs).toISOString()}] ${entry.repo} — ${entry.label}: ${entry.status}`,
         entry.message,
       ];
-      for (const { args, exitCode, stdout, stderr } of entry.commands) {
-        lines.push(`  $ git ${args.join(" ")}  (exit ${exitCode ?? "signal"})`);
+      for (const command of entry.commands) {
+        const { exitCode, stdout, stderr } = command;
+        lines.push(`  $ ${commandText(command)}  (exit ${exitCode ?? "signal"})`);
         for (const output of [stdout, stderr]) {
           if (output.trim())
             lines.push(

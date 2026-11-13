@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { clearLog, entryFailed, formatLog, matchesLogSearch, useActivityLog } from "../activityLog";
+import {
+  clearLog,
+  commandText,
+  entryFailed,
+  formatLog,
+  matchesLogSearch,
+  useActivityLog,
+} from "../activityLog";
 import { api } from "../api";
 import { basename } from "../format";
 
@@ -84,7 +91,7 @@ export function ActivityView() {
                   <ol className="command-log">
                     {entry.commands.map((command, index) => (
                       <li key={index}>
-                        <code>git {command.args.join(" ")}</code>
+                        <code>{commandText(command)}</code>
                         <span className="exit-code">exit {command.exitCode ?? "signal"}</span>
                         {command.stdout.trim() && <pre>{command.stdout.trim()}</pre>}
                         {command.stderr.trim() && (

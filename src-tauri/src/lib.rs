@@ -1,5 +1,6 @@
 mod actions;
 mod app_settings;
+mod artifacts;
 mod branches;
 mod changes;
 mod cleanup;
@@ -28,6 +29,7 @@ use tokio::sync::Semaphore;
 
 use actions::{Action, ActionResult, RepoSummary};
 use app_settings::{AppSettings, GitInfo};
+use artifacts::{ArtifactReport, Tier};
 use branches::BranchReport;
 use changes::FileChange;
 use cleanup::CleanupResult;
@@ -383,6 +385,30 @@ async fn remove_worktrees(
 }
 
 #[tauri::command]
+async fn scan_artifacts(
+    path: PathBuf,
+    state: State<'_, AppState>,
+) -> Result<ArtifactReport, String> {
+    let mut git = state.git(&path)?;
+    let _permit = state.permits.acquire().await.map_err(|e| e.to_string())?;
+    artifacts::scan(&mut git).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn delete_artifacts(
+    path: PathBuf,
+    artifacts: Vec<PathBuf>,
+    tiers: Vec<Tier>,
+    state: State<'_, AppState>,
+) -> Result<CleanupResult, String> {
+    let git = state.git(&path)?;
+    let _permit = state.permits.acquire().await.map_err(|e| e.to_string())?;
+    artifacts::delete(git, &artifacts, &tiers)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn analyze_unpushed(
     path: PathBuf,
     fetch: bool,
@@ -553,6 +579,8 @@ pub fn run() {
             analyze_branches,
             delete_branches,
             remove_worktrees,
+            scan_artifacts,
+            delete_artifacts,
             analyze_unpushed,
             drop_stashes,
             list_branch_names,

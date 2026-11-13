@@ -7,6 +7,8 @@ import type {
   OpenTarget,
   SettingsView,
   ActionResult,
+  ArtifactReport,
+  ArtifactTier,
   BranchDiff,
   BranchReport,
   BranchSettings,
@@ -54,6 +56,9 @@ export const api = {
     allowUnmerged: boolean,
   ) =>
     invoke<CleanupResult>("remove_worktrees", { path, worktrees, deleteBranches, allowUnmerged }),
+  scanArtifacts: (path: string) => invoke<ArtifactReport>("scan_artifacts", { path }),
+  deleteArtifacts: (path: string, artifacts: string[], tiers: ArtifactTier[]) =>
+    invoke<CleanupResult>("delete_artifacts", { path, artifacts, tiers }),
   analyzeUnpushed: (path: string, fetch: boolean) =>
     invoke<UnpushedReport>("analyze_unpushed", { path, fetch }),
   dropStashes: (path: string, stashes: string[]) =>

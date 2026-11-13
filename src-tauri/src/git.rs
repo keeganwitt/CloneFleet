@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -33,9 +33,18 @@ fn timeout_for(args: &[&str]) -> Duration {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum CommandKind {
+    #[default]
+    Git,
+    Filesystem,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandRecord {
+    pub kind: CommandKind,
     pub args: Vec<String>,
     pub exit_code: Option<i32>,
     pub stdout: String,
@@ -45,6 +54,16 @@ pub struct CommandRecord {
 impl CommandRecord {
     pub fn success(&self) -> bool {
         self.exit_code == Some(0)
+    }
+
+    pub fn filesystem(args: &[&str], error: Option<String>) -> Self {
+        Self {
+            kind: CommandKind::Filesystem,
+            args: args.iter().map(|a| a.to_string()).collect(),
+            exit_code: Some(if error.is_some() { 1 } else { 0 }),
+            stdout: String::new(),
+            stderr: error.unwrap_or_default(),
+        }
     }
 }
 
@@ -85,6 +104,23 @@ impl Git {
         self
     }
 
+    pub fn repo(&self) -> &Path {
+        &self.repo
+    }
+
+    pub fn at(&self, dir: impl Into<PathBuf>) -> Self {
+        Self {
+            program: self.program.clone(),
+            repo: dir.into(),
+            settings: self.settings.clone(),
+            log: Vec::new(),
+        }
+    }
+
+    pub fn record(&mut self, record: CommandRecord) {
+        self.log.push(record);
+    }
+
     pub fn branch_settings(&self) -> &BranchSettings {
         &self.settings
     }
@@ -121,6 +157,7 @@ impl Git {
             })??;
 
         let record = CommandRecord {
+            kind: CommandKind::Git,
             args: args.iter().map(|a| a.to_string()).collect(),
             exit_code: output.status.code(),
             stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
@@ -168,6 +205,7 @@ mod tests {
 
     fn record(code: Option<i32>, stdout: &str, stderr: &str) -> CommandRecord {
         CommandRecord {
+            kind: CommandKind::Git,
             args: vec![],
             exit_code: code,
             stdout: stdout.into(),

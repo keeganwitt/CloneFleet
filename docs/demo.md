@@ -22,9 +22,9 @@ The repositories come from `src-tauri/src/demo.rs`, which builds them with your 
 | `services/search-indexer`  | diverged from upstream                                                                                                                           |
 | `services/notifications`   | stopped partway through a rebase with a conflict                                                                                                 |
 | `libraries/design-system`  | merged, squash-merged, remote-deleted, stale (7 months), and active branches, plus linked worktrees for a merged branch and a stale unmerged one |
-| `libraries/shared-utils`   | clean and just fetched                                                                                                                           |
+| `libraries/shared-utils`   | clean and just fetched, with ignored `dist`, `node_modules`, and `.venv` directories to clean up                                                 |
 | `libraries/analytics-sdk`  | a fork (`origin` is `dana/analytics-sdk`, `upstream` is `acme/analytics-sdk`) whose upstream has 2 new commits, for **Rebase fork on upstream**  |
-| `tools/infra-terraform`    | clean, but last fetched 3 days ago                                                                                                               |
+| `tools/infra-terraform`    | clean, but last fetched 3 days ago, with an ignored `.terraform` directory                                                                       |
 | `tools/legacy-portal`      | a remote that can't be reached; run **Fetch all** to see the failure card                                                                        |
 | `tools/dotfiles`           | a local-only repository with no remote                                                                                                           |
 
