@@ -82,7 +82,18 @@ function mockBackend(confirmed = true) {
       case "analyze_unpushed":
         return args.path === "/busy" ? busy : empty;
       case "plugin:dialog|message":
-        return confirmed ? "Drop stashes" : "Cancel";
+        return confirmed
+          ? (args.buttons as { OkCancelCustom: [string, string] }).OkCancelCustom[0]
+          : "Cancel";
+      case "delete_branches":
+        return {
+          items: (args.branches as string[]).map((item) => ({
+            item,
+            status: "succeeded",
+            message: `Deleted ${item}`,
+          })),
+          commands: [],
+        };
       case "drop_stashes":
         return {
           items: (args.stashes as string[]).map((item) => ({
@@ -153,6 +164,51 @@ describe("UnpushedView", () => {
       expect(calls.filter((c) => c.cmd === "plugin:dialog|message")).toHaveLength(1),
     );
     expect(calls.filter((c) => c.cmd === "drop_stashes")).toHaveLength(0);
+  });
+
+  it("deletes selected unmerged branches after warning that their commits are on no remote", async () => {
+    const user = userEvent.setup();
+    const calls = mockBackend();
+    const onChanged = renderView();
+    await user.click(await screen.findByLabelText("Select branch local-only in busy"));
+    await user.click(screen.getByRole("button", { name: "Delete 1 branch" }));
+
+    expect(await screen.findByText("Deleted local-only")).toBeInTheDocument();
+    const dialog = calls.find((c) => c.cmd === "plugin:dialog|message")!;
+    expect(dialog.args.message).toContain("exist on no remote");
+    expect(calls.filter((c) => c.cmd === "delete_branches").map((c) => c.args)).toEqual([
+      { path: "/busy", branches: ["local-only"], allowUnmerged: true },
+    ]);
+    expect(onChanged).toHaveBeenCalledWith(["/busy"]);
+  });
+
+  it("deletes merged branches without allowing unmerged deletion", async () => {
+    const user = userEvent.setup();
+    const calls = mockBackend();
+    renderView();
+    await user.click(await screen.findByLabelText("Select branch squashed in busy"));
+    await user.click(screen.getByRole("button", { name: "Delete 1 branch" }));
+
+    expect(await screen.findByText("Deleted squashed")).toBeInTheDocument();
+    const dialog = calls.find((c) => c.cmd === "plugin:dialog|message")!;
+    expect(dialog.args.message).toContain("1 of them has its changes already in a base branch");
+    expect(calls.find((c) => c.cmd === "delete_branches")?.args).toEqual({
+      path: "/busy",
+      branches: ["squashed"],
+      allowUnmerged: false,
+    });
+  });
+
+  it("does not delete branches when the confirmation is cancelled", async () => {
+    const user = userEvent.setup();
+    const calls = mockBackend(false);
+    renderView();
+    await user.click(await screen.findByLabelText("Select branch local-only in busy"));
+    await user.click(screen.getByRole("button", { name: "Delete 1 branch" }));
+    await waitFor(() =>
+      expect(calls.filter((c) => c.cmd === "plugin:dialog|message")).toHaveLength(1),
+    );
+    expect(calls.filter((c) => c.cmd === "delete_branches")).toHaveLength(0);
   });
 
   it("filters to work older than a number of days", async () => {

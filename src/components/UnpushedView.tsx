@@ -3,7 +3,13 @@ import { recordAction, summarizeItems } from "../activityLog";
 import { api } from "../api";
 import { formatAge } from "../cleanup";
 import { basename } from "../format";
-import type { ItemOutcome, MergeEvidence, UnpushedBranch, UnpushedReport } from "../types";
+import type {
+  CleanupResult,
+  ItemOutcome,
+  MergeEvidence,
+  UnpushedBranch,
+  UnpushedReport,
+} from "../types";
 
 type RepoUnpushed =
   | { status: "loading" }
@@ -92,15 +98,17 @@ export function UnpushedView({ paths, onChanged }: Props) {
     Object.fromEntries(paths.map((repo) => [repo, { status: "loading" }])),
   );
   const [selectedStashes, setSelectedStashes] = useState<ReadonlySet<string>>(new Set());
+  const [selectedBranches, setSelectedBranches] = useState<ReadonlySet<string>>(new Set());
   const [results, setResults] = useState<Record<string, ItemOutcome[]>>({});
   const [busy, setBusy] = useState(false);
   const [nowUnix, setNowUnix] = useState(currentUnixTime);
 
   const applyReport = useCallback((repo: string, unpushed: RepoUnpushed) => {
     setReports((current) => ({ ...current, [repo]: unpushed }));
-    setSelectedStashes(
-      (current) => new Set([...current].filter((k) => !k.startsWith(`${repo}\n`))),
-    );
+    const otherRepos = (current: ReadonlySet<string>) =>
+      new Set([...current].filter((k) => !k.startsWith(`${repo}\n`)));
+    setSelectedStashes(otherRepos);
+    setSelectedBranches(otherRepos);
     setNowUnix(currentUnixTime());
   }, []);
 
@@ -136,27 +144,37 @@ export function UnpushedView({ paths, onChanged }: Props) {
     report.stashes.map((s) => key(repo, s.sha)).filter((k) => selectedStashes.has(k)),
   );
 
-  const dropStashes = async () => {
-    const message =
-      `Drop ${plural(stashTargets.length, "stash", "stashes")}?\n\n` +
-      "Dropped stashes can only be recovered by SHA until git garbage-collects them.";
-    if (!(await api.confirmDestructive(message, "Drop stashes"))) return;
+  const branchTargets = loaded.flatMap(([repo, report]) =>
+    report.branches.map((b) => key(repo, b.name)).filter((k) => selectedBranches.has(k)),
+  );
+  const unmergedBranchTargets = new Set(
+    loaded.flatMap(([repo, report]) =>
+      report.branches.filter((b) => !b.merged).map((b) => key(repo, b.name)),
+    ),
+  );
+
+  const applyToRepos = async (
+    targets: string[],
+    action: string,
+    run: (repo: string, items: string[]) => Promise<CleanupResult>,
+  ) => {
     setBusy(true);
     const groups = new Map<string, string[]>();
-    for (const target of stashTargets) {
-      const [repo, sha] = target.split("\n");
-      groups.set(repo, [...(groups.get(repo) ?? []), sha]);
+    for (const target of targets) {
+      const index = target.indexOf("\n");
+      const repo = target.slice(0, index);
+      groups.set(repo, [...(groups.get(repo) ?? []), target.slice(index + 1)]);
     }
     try {
       await Promise.all(
-        [...groups].map(async ([repo, shas]) => {
+        [...groups].map(async ([repo, names]) => {
           let items: ItemOutcome[];
           try {
-            const result = await api.dropStashes(repo, shas);
-            recordAction(repo, "Drop stashes", summarizeItems(result.items), result.commands);
+            const result = await run(repo, names);
+            recordAction(repo, action, summarizeItems(result.items), result.commands);
             items = result.items;
           } catch (error) {
-            items = shas.map((item) => ({ item, status: "failed", message: errorMessage(error) }));
+            items = names.map((item) => ({ item, status: "failed", message: errorMessage(error) }));
           }
           setResults((current) => ({ ...current, [repo]: items }));
         }),
@@ -169,8 +187,38 @@ export function UnpushedView({ paths, onChanged }: Props) {
     }
   };
 
-  const toggleStash = (itemKey: string) =>
-    setSelectedStashes((current) => {
+  const dropStashes = async () => {
+    const message =
+      `Drop ${plural(stashTargets.length, "stash", "stashes")}?\n\n` +
+      "Dropped stashes can only be recovered by SHA until git garbage-collects them.";
+    if (!(await api.confirmDestructive(message, "Drop stashes"))) return;
+    await applyToRepos(stashTargets, "Drop stashes", (repo, shas) => api.dropStashes(repo, shas));
+  };
+
+  const deleteBranches = async () => {
+    const unmerged = branchTargets.filter((k) => unmergedBranchTargets.has(k));
+    let message =
+      `Delete ${plural(branchTargets.length, "branch", "branches")} with unpushed commits?\n\n` +
+      "Their commits exist on no remote and can only be recovered by SHA until git " +
+      "garbage-collects them.";
+    if (unmerged.length < branchTargets.length) {
+      message += ` ${branchTargets.length - unmerged.length} of them ${
+        branchTargets.length - unmerged.length === 1 ? "has its" : "have their"
+      } changes already in a base branch.`;
+    }
+    if (!(await api.confirmDestructive(message, "Delete branches"))) return;
+    const unmergedSet = new Set(unmerged);
+    await applyToRepos(branchTargets, "Delete branches", (repo, names) =>
+      api.deleteBranches(
+        repo,
+        names,
+        names.some((name) => unmergedSet.has(key(repo, name))),
+      ),
+    );
+  };
+
+  const toggle = (setter: typeof setSelectedStashes, itemKey: string) =>
+    setter((current) => {
       const next = new Set(current);
       if (!next.delete(itemKey)) next.add(itemKey);
       return next;
@@ -229,6 +277,9 @@ export function UnpushedView({ paths, onChanged }: Props) {
           />
           days
         </span>
+        <button disabled={busy || branchTargets.length === 0} onClick={deleteBranches}>
+          Delete {plural(branchTargets.length, "branch", "branches")}
+        </button>
         <button disabled={busy || stashTargets.length === 0} onClick={dropStashes}>
           Drop {plural(stashTargets.length, "stash", "stashes")}
         </button>
@@ -247,7 +298,9 @@ export function UnpushedView({ paths, onChanged }: Props) {
             results={results[repo]}
             nowUnix={nowUnix}
             isStashSelected={(sha) => selectedStashes.has(key(repo, sha))}
-            onToggleStash={(sha) => toggleStash(key(repo, sha))}
+            onToggleStash={(sha) => toggle(setSelectedStashes, key(repo, sha))}
+            isBranchSelected={(name) => selectedBranches.has(key(repo, name))}
+            onToggleBranch={(name) => toggle(setSelectedBranches, key(repo, name))}
           />
         );
       })}
@@ -262,6 +315,8 @@ interface SectionProps {
   nowUnix: number;
   isStashSelected: (sha: string) => boolean;
   onToggleStash: (sha: string) => void;
+  isBranchSelected: (name: string) => boolean;
+  onToggleBranch: (name: string) => void;
 }
 
 function RepoSection({
@@ -271,6 +326,8 @@ function RepoSection({
   nowUnix,
   isStashSelected,
   onToggleStash,
+  isBranchSelected,
+  onToggleBranch,
 }: SectionProps) {
   const name = basename(repo);
   let body;
@@ -317,6 +374,14 @@ function RepoSection({
               <tbody>
                 {report.branches.map((branch) => (
                   <tr key={branch.name}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        aria-label={`Select branch ${branch.name} in ${name}`}
+                        checked={isBranchSelected(branch.name)}
+                        onChange={() => onToggleBranch(branch.name)}
+                      />
+                    </td>
                     <td>
                       <code>{branch.name}</code>
                     </td>
