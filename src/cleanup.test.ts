@@ -85,7 +85,7 @@ describe("worktreeState", () => {
     expect(state({ prunable: true, merged: null, dirty: null })).toMatchObject({
       category: "merged",
       preselected: true,
-      label: "Directory missing; can be pruned",
+      label: "Directory missing; removing it clears git's record of it",
     });
   });
 

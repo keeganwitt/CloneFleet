@@ -101,7 +101,7 @@ export function worktreeState(
       category: "merged",
       selectable: true,
       preselected: true,
-      label: "Directory missing; can be pruned",
+      label: "Directory missing; removing it clears git's record of it",
     };
   }
   if (worktree.dirty) return blocked("Has uncommitted or untracked files");
