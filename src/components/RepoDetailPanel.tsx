@@ -74,8 +74,8 @@ export function RepoDetailPanel(props: Props) {
     <aside className="detail-panel" role="dialog" aria-label={`Details for ${name}`}>
       <div className="toolbar">
         <h2 title={props.path}>{name}</h2>
-        <button className="link" onClick={props.onClose} aria-label="Close details">
-          ×
+        <button onClick={props.onClose} aria-label="Close details">
+          Close
         </button>
       </div>
       <OpenButtons path={props.path} webHosts={props.webHosts ?? []} />
@@ -201,8 +201,8 @@ function WorkingFileDiff({
         <code>{change.path}</code>
         <span className="muted">{changeCounts(diff.value)}</span>
         <span className="spacer" />
-        <button className="link" aria-label={`Close diff for ${change.path}`} onClick={onClose}>
-          ×
+        <button aria-label={`Close diff for ${change.path}`} onClick={onClose}>
+          Close
         </button>
       </div>
       <DiffView patch={diff.value.patch} truncated={diff.value.truncated} />

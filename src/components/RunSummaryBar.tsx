@@ -65,8 +65,8 @@ export function RunSummaryBar({
           </button>
         )}
       </span>
-      <button className="link" onClick={onDismiss} aria-label="Dismiss run summary">
-        ×
+      <button onClick={onDismiss} aria-label="Close run summary">
+        Close
       </button>
     </div>
   );

@@ -239,8 +239,8 @@ function App() {
       {manager.notice && (
         <div className="notice" role="status">
           {manager.notice}
-          <button className="link" onClick={manager.dismissNotice} aria-label="Dismiss">
-            ×
+          <button onClick={manager.dismissNotice} aria-label="Close notice">
+            Close
           </button>
         </div>
       )}
