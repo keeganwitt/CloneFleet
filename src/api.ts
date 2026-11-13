@@ -57,8 +57,12 @@ export const api = {
   ) =>
     invoke<CleanupResult>("remove_worktrees", { path, worktrees, deleteBranches, allowUnmerged }),
   scanArtifacts: (path: string) => invoke<ArtifactReport>("scan_artifacts", { path }),
-  deleteArtifacts: (path: string, artifacts: string[], tiers: ArtifactTier[]) =>
-    invoke<CleanupResult>("delete_artifacts", { path, artifacts, tiers }),
+  deleteArtifacts: (
+    path: string,
+    artifacts: string[],
+    tiers: ArtifactTier[],
+    removal: "delete" | "trash",
+  ) => invoke<CleanupResult>("delete_artifacts", { path, artifacts, tiers, removal }),
   analyzeUnpushed: (path: string, fetch: boolean) =>
     invoke<UnpushedReport>("analyze_unpushed", { path, fetch }),
   dropStashes: (path: string, stashes: string[]) =>

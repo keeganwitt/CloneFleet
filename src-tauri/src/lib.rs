@@ -29,7 +29,7 @@ use tokio::sync::Semaphore;
 
 use actions::{Action, ActionResult, RepoSummary};
 use app_settings::{AppSettings, GitInfo};
-use artifacts::{ArtifactReport, Tier};
+use artifacts::{ArtifactReport, Removal, Tier};
 use branches::BranchReport;
 use changes::FileChange;
 use cleanup::CleanupResult;
@@ -399,11 +399,12 @@ async fn delete_artifacts(
     path: PathBuf,
     artifacts: Vec<PathBuf>,
     tiers: Vec<Tier>,
+    removal: Removal,
     state: State<'_, AppState>,
 ) -> Result<CleanupResult, String> {
     let git = state.git(&path)?;
     let _permit = state.permits.acquire().await.map_err(|e| e.to_string())?;
-    artifacts::delete(git, &artifacts, &tiers)
+    artifacts::delete(git, &artifacts, &tiers, removal)
         .await
         .map_err(|e| e.to_string())
 }

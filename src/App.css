@@ -362,6 +362,12 @@ input.days {
   margin-left: -4px;
 }
 
+.preselect-days {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .toolbar-label {
   min-width: 56px;
   font-size: 12px;

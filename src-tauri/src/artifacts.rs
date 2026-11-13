@@ -381,6 +381,57 @@ pub async fn scan(git: &mut Git) -> Result<ArtifactReport, GitError> {
     })
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum Removal {
+    Delete,
+    Trash,
+}
+
+impl Removal {
+    fn log_args(self, path: &str) -> [&str; 2] {
+        match self {
+            Removal::Delete => ["delete", path],
+            Removal::Trash => ["move-to-trash", path],
+        }
+    }
+
+    fn remove(self, path: &Path) -> Result<(), String> {
+        match self {
+            Removal::Delete => fs::remove_dir_all(path).map_err(|e| e.to_string()),
+            Removal::Trash => {
+                #[allow(unused_mut)]
+                let mut context = trash::TrashContext::default();
+                #[cfg(target_os = "macos")]
+                {
+                    use trash::macos::{DeleteMethod, TrashContextExtMacos};
+                    // The default Finder method asks for Automation permission and plays a sound.
+                    context.set_delete_method(DeleteMethod::NsFileManager);
+                }
+                context.delete(path).map_err(|e| e.to_string())
+            }
+        }
+    }
+
+    fn outcome(self, shown: &str, kind: &str, bytes: u64, result: Result<(), String>) -> Outcome {
+        let size = format_bytes(bytes);
+        match (self, result) {
+            (Removal::Delete, Ok(())) => {
+                Outcome::succeeded(format!("Deleted {shown} ({kind}, freed {size})"))
+            }
+            (Removal::Trash, Ok(())) => {
+                Outcome::succeeded(format!("Moved {shown} to the Trash ({kind}, {size})"))
+            }
+            (Removal::Delete, Err(error)) => {
+                Outcome::failed(format!("Couldn't delete {shown}: {error}"))
+            }
+            (Removal::Trash, Err(error)) => {
+                Outcome::failed(format!("Couldn't move {shown} to the Trash: {error}"))
+            }
+        }
+    }
+}
+
 pub fn format_bytes(bytes: u64) -> String {
     const UNITS: &[&str] = &["kB", "MB", "GB", "TB"];
     if bytes < 1000 {
@@ -403,6 +454,7 @@ async fn delete_one(
     worktrees: &[RawWorktree],
     path: &Path,
     tiers: &[Tier],
+    removal: Removal,
 ) -> Result<Outcome, GitError> {
     let not_found = || {
         Ok(Outcome::skipped(
@@ -503,33 +555,27 @@ async fn delete_one(
     }
 
     let target = path.to_path_buf();
-    let removed = tokio::task::spawn_blocking(move || fs::remove_dir_all(target))
+    let removed = tokio::task::spawn_blocking(move || removal.remove(&target))
         .await
-        .unwrap_or_else(|e| Err(std::io::Error::other(e)));
+        .unwrap_or_else(|e| Err(e.to_string()));
     let display = path.to_string_lossy();
     git.record(CommandRecord::filesystem(
-        &["delete", &display],
-        removed.as_ref().err().map(|e| e.to_string()),
+        &removal.log_args(&display),
+        removed.as_ref().err().cloned(),
     ));
-    Ok(match removed {
-        Ok(()) => Outcome::succeeded(format!(
-            "Deleted {shown} ({}, freed {})",
-            rule.kind,
-            format_bytes(found.bytes)
-        )),
-        Err(error) => Outcome::failed(format!("Couldn't delete {shown}: {error}")),
-    })
+    Ok(removal.outcome(&shown.to_string(), rule.kind, found.bytes, removed))
 }
 
 pub async fn delete(
     mut git: Git,
     paths: &[PathBuf],
     tiers: &[Tier],
+    removal: Removal,
 ) -> Result<CleanupResult, GitError> {
     let worktrees = load_worktrees(&mut git).await?;
     let mut items = Vec::with_capacity(paths.len());
     for path in paths {
-        let outcome = delete_one(&mut git, &worktrees, path, tiers).await?;
+        let outcome = delete_one(&mut git, &worktrees, path, tiers, removal).await?;
         items.push(ItemOutcome {
             item: path.display().to_string(),
             outcome,
@@ -697,9 +743,14 @@ mod tests {
         let fixture = Fixture::new();
         let work = node_project(&fixture, "node_modules/\n");
         let target = work.join("node_modules");
-        let result = delete(Git::new(&work), std::slice::from_ref(&target), ALL_TIERS)
-            .await
-            .unwrap();
+        let result = delete(
+            Git::new(&work),
+            std::slice::from_ref(&target),
+            ALL_TIERS,
+            Removal::Delete,
+        )
+        .await
+        .unwrap();
         assert!(
             matches!(result.items[0].outcome, Outcome::Succeeded { .. }),
             "{result:?}"
@@ -721,6 +772,23 @@ mod tests {
         }
     }
 
+    #[test]
+    fn describes_each_removal_method() {
+        assert_eq!(Removal::Trash.log_args("/r/x"), ["move-to-trash", "/r/x"]);
+        assert_eq!(
+            Removal::Trash.outcome("dist", "Distribution output", 2_000, Ok(())),
+            Outcome::succeeded("Moved dist to the Trash (Distribution output, 2.0 kB)")
+        );
+        assert_eq!(
+            Removal::Delete.outcome("dist", "Distribution output", 2_000, Ok(())),
+            Outcome::succeeded("Deleted dist (Distribution output, freed 2.0 kB)")
+        );
+        assert!(matches!(
+            Removal::Trash.outcome("dist", "Distribution output", 0, Err("no trash".into())),
+            Outcome::Failed { message, .. } if message == "Couldn't move dist to the Trash: no trash"
+        ));
+    }
+
     #[tokio::test]
     async fn rechecks_before_deleting() {
         let fixture = Fixture::new();
@@ -731,21 +799,28 @@ mod tests {
             Git::new(&work),
             std::slice::from_ref(&target),
             &[Tier::BuildOutput],
+            Removal::Delete,
         )
         .await
         .unwrap();
         assert_eq!(skip_reason(&hidden), Some(SkipReason::TierHidden));
 
         fixture.commit(&work, ".gitignore", "", "stop ignoring");
-        let unignored = delete(Git::new(&work), std::slice::from_ref(&target), ALL_TIERS)
-            .await
-            .unwrap();
+        let unignored = delete(
+            Git::new(&work),
+            std::slice::from_ref(&target),
+            ALL_TIERS,
+            Removal::Delete,
+        )
+        .await
+        .unwrap();
         assert_eq!(skip_reason(&unignored), Some(SkipReason::NotIgnored));
 
         let outside = delete(
             Git::new(&work),
             &[fixture.root().join("elsewhere")],
             ALL_TIERS,
+            Removal::Delete,
         )
         .await
         .unwrap();
@@ -763,9 +838,14 @@ mod tests {
         fs::remove_dir_all(work.join("node_modules")).unwrap();
         std::os::unix::fs::symlink(&outside, work.join("node_modules")).unwrap();
 
-        let result = delete(Git::new(&work), &[work.join("node_modules")], ALL_TIERS)
-            .await
-            .unwrap();
+        let result = delete(
+            Git::new(&work),
+            &[work.join("node_modules")],
+            ALL_TIERS,
+            Removal::Delete,
+        )
+        .await
+        .unwrap();
         assert_eq!(skip_reason(&result), Some(SkipReason::NotArtifact));
         assert!(outside.join("precious.txt").exists());
     }

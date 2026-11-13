@@ -50,6 +50,7 @@ export function ArtifactsView({ paths, scans, onRescan }: Props) {
   const [results, setResults] = useState<Record<string, ItemOutcome[]>>({});
   const [busy, setBusy] = useState(false);
   const [hideEmpty, setHideEmpty] = useState(true);
+  const [moveToTrash, setMoveToTrash] = useState(false);
   const [nowUnix, setNowUnix] = useState(currentUnixTime);
   const preselected = useRef(new WeakSet<ArtifactReport>());
   const unusedDaysRef = useRef(unusedDays);
@@ -129,33 +130,40 @@ export function ArtifactsView({ paths, scans, onRescan }: Props) {
     }
     const reinstall = targetArtifacts.filter((a) => a.tier === "reinstall").length;
     const unreproducible = targetArtifacts.filter((a) => a.tier === "unreproducible").length;
-    let message =
-      `Permanently delete ${plural(targets.length, "directory", "directories")} ` +
-      `(${formatBytes(targetBytes)}) in ${plural(groups.size, "repository", "repositories")}? ` +
-      "Nothing goes to the Trash.";
+    const what =
+      `${plural(targets.length, "directory", "directories")} (${formatBytes(targetBytes)}) ` +
+      `in ${plural(groups.size, "repository", "repositories")}`;
+    let message = moveToTrash
+      ? `Move ${what} to the Trash? The space is freed when the Trash is emptied.`
+      : `Permanently delete ${what}? Nothing goes to the Trash.`;
+    const subject = (count: number) => (targets.length === 1 ? "It" : `${count} of them`);
     if (reinstall > 0) {
       message +=
-        `\n\n${reinstall} of them will need reinstalling before the project builds again, ` +
+        `\n\n${subject(reinstall)} will need reinstalling before the project builds again, ` +
         "for example with npm install or gradle build.";
     }
     if (unreproducible > 0) {
       message +=
-        `\n\n${unreproducible} of them may not be reproducible: ` +
+        `\n\n${subject(unreproducible)} may not be reproducible: ` +
         "virtualenvs can hold packages installed by hand.";
     }
-    if (!(await api.confirmDestructive(message, "Delete directories"))) return;
+    const confirmLabel = moveToTrash ? "Move to Trash" : "Delete directories";
+    if (!(await api.confirmDestructive(message, confirmLabel))) return;
 
     setBusy(true);
     const tiers = [...shown];
+    const removal = moveToTrash ? "trash" : "delete";
     try {
       await Promise.all(
         [...groups].map(async ([repo, artifactPaths]) => {
           let outcomes: ItemOutcome[];
           try {
-            const result = await api.deleteArtifacts(repo, artifactPaths, tiers);
+            const result = await api.deleteArtifacts(repo, artifactPaths, tiers, removal);
             recordAction(
               repo,
-              "Delete build and dependency directories",
+              moveToTrash
+                ? "Move build and dependency directories to the Trash"
+                : "Delete build and dependency directories",
               summarizeItems(result.items),
               result.commands,
             );
@@ -219,11 +227,7 @@ export function ArtifactsView({ paths, scans, onRescan }: Props) {
       </ul>
 
       <div className="toolbar">
-        <button disabled={busy || targets.length === 0} onClick={deleteSelected}>
-          Delete {plural(targets.length, "directory", "directories")}
-          {targets.length > 0 && ` (${formatBytes(targetBytes)})`}
-        </button>
-        <span className="muted stale-days">
+        <span className="muted preselect-days">
           Build output unchanged for
           <input
             type="number"
@@ -235,6 +239,22 @@ export function ArtifactsView({ paths, scans, onRescan }: Props) {
           />
           days is preselected. Only directories git ignores entirely are listed.
         </span>
+      </div>
+
+      <div className="toolbar">
+        <button disabled={busy || targets.length === 0} onClick={deleteSelected}>
+          {moveToTrash ? "Move" : "Delete"} {plural(targets.length, "directory", "directories")}
+          {moveToTrash && " to the Trash"}
+          {targets.length > 0 && ` (${formatBytes(targetBytes)})`}
+        </button>
+        <label>
+          <input
+            type="checkbox"
+            checked={moveToTrash}
+            onChange={(event) => setMoveToTrash(event.target.checked)}
+          />
+          Move to Trash instead of deleting
+        </label>
       </div>
 
       {hideEmpty && emptyRepos.size > 0 && (

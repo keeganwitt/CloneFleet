@@ -138,9 +138,44 @@ describe("ArtifactsView", () => {
         path: "/repo",
         artifacts: ["/repo/target", "/repo/web/node_modules"],
         tiers: ["buildOutput", "reinstall"],
+        removal: "delete",
       },
     ]);
     expect(screen.getByText("Deleted /repo/target")).toBeInTheDocument();
+  });
+
+  it("moves directories to the Trash when asked", async () => {
+    const calls = mockBackend();
+    const onRescan = renderView();
+
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Move to Trash instead of deleting" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Move 2 directories to the Trash (4.0 MB)" }),
+    );
+
+    await waitFor(() => expect(onRescan).toHaveBeenCalled());
+    const [dialog] = called(calls, "plugin:dialog|message");
+    expect(dialog.message).toContain("Move 2 directories (4.0 MB) in 1 repository to the Trash?");
+    expect(dialog.message).toContain("freed when the Trash is emptied");
+    expect(called(calls, "delete_artifacts")[0]).toMatchObject({ removal: "trash" });
+  });
+
+  it("words the warnings for a single directory", async () => {
+    const calls = mockBackend();
+    renderView();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Needs reinstalling" }));
+    await userEvent.click(checkbox("/repo/target"));
+    await userEvent.click(checkbox("/wt/feature/target"));
+    await userEvent.click(checkbox("/repo/web/node_modules"));
+    await userEvent.click(screen.getByRole("button", { name: /^Delete 1 directory/ }));
+
+    await waitFor(() => expect(called(calls, "plugin:dialog|message")).toHaveLength(1));
+    expect(called(calls, "plugin:dialog|message")[0].message).toContain(
+      "It will need reinstalling",
+    );
   });
 
   it("deletes nothing when the confirmation is cancelled", async () => {
