@@ -4,6 +4,7 @@ import { formatRecent } from "./cleanup";
 import { AboutDialog } from "./components/AboutDialog";
 import { ActionPanel, SelectionLine } from "./components/ActionBar";
 import { ActivityView } from "./components/ActivityView";
+import { ArtifactsView } from "./components/ArtifactsView";
 import { CleanupView } from "./components/CleanupView";
 import { Dashboard } from "./components/Dashboard";
 import { FilterBar } from "./components/FilterBar";
@@ -24,6 +25,8 @@ import { summarizeRun, type RunStatus } from "./runSummary";
 import { defaultSort, nextSort, sortPaths, type Sort, type SortKey } from "./sorting";
 import { isBusy } from "./state";
 import type { Action, PushPlan } from "./types";
+import { reclaimableBytes } from "./artifacts";
+import { useArtifactScan } from "./useArtifactScan";
 import { useFleetScan } from "./useFleetScan";
 import { useNow } from "./useNow";
 import { useRepoManager } from "./useRepoManager";
@@ -34,6 +37,7 @@ type Page =
   | { kind: "overview" }
   | { kind: "repos" }
   | { kind: "cleanup"; paths: string[] }
+  | { kind: "artifacts"; paths: string[] }
   | { kind: "unpushed"; paths: string[] }
   | { kind: "remotes"; paths: string[] }
   | { kind: "activity" };
@@ -48,6 +52,12 @@ function App() {
   const settings = useSettings();
   const { state } = manager;
   const fleet = useFleetScan(state.order);
+  const artifactScan = useArtifactScan(state.order);
+  const reclaimable: Record<string, number | undefined> = {};
+  for (const path of state.order) {
+    const scan = artifactScan.scans[path];
+    if (scan?.status === "loaded") reclaimable[path] = reclaimableBytes(scan.report.artifacts);
+  }
   const nowUnix = useNow();
   const [page, setPage] = useState<Page>({ kind: "overview" });
   const [showSettings, setShowSettings] = useState(false);
@@ -139,6 +149,7 @@ function App() {
     if (action) void runOn(paths, action);
     else if (kind === "reviewUnpushed") setPage({ kind: "unpushed", paths });
     else if (kind === "cleanup") setPage({ kind: "cleanup", paths });
+    else if (kind === "cleanArtifacts") setPage({ kind: "artifacts", paths });
   };
 
   const navigate = (next: Page) => {
@@ -161,7 +172,10 @@ function App() {
     </button>
   );
   const scoped =
-    (page.kind === "cleanup" || page.kind === "unpushed" || page.kind === "remotes") &&
+    (page.kind === "cleanup" ||
+      page.kind === "artifacts" ||
+      page.kind === "unpushed" ||
+      page.kind === "remotes") &&
     page.paths.length < state.order.length
       ? page
       : undefined;
@@ -169,6 +183,7 @@ function App() {
     [{ kind: "overview" }, "Overview"],
     [{ kind: "repos" }, "Repositories"],
     [{ kind: "cleanup", paths: state.order }, "Branch cleanup"],
+    [{ kind: "artifacts", paths: state.order }, "Disk cleanup"],
     [{ kind: "unpushed", paths: state.order }, "Unpushed work"],
     [{ kind: "remotes", paths: state.order }, "Remotes"],
     [{ kind: "activity" }, "Activity"],
@@ -317,6 +332,7 @@ function App() {
                 paths={state.order}
                 states={state.repos}
                 healths={fleet.healths}
+                reclaimable={reclaimable}
                 pendingScans={fleet.pending}
                 lastScannedUnix={fleet.lastScannedUnix}
                 nowUnix={nowUnix}
@@ -328,6 +344,7 @@ function App() {
                 onRescan={() => {
                   void manager.refreshSummaries(state.order);
                   void fleet.scan(state.order);
+                  void artifactScan.scan(state.order);
                 }}
               />
             )}
@@ -355,6 +372,15 @@ function App() {
                 paths={page.paths}
                 onChanged={changed}
                 onOpenBranch={(path, branch) => setDetail({ path, tab: "branches", branch })}
+              />
+            )}
+
+            {page.kind === "artifacts" && (
+              <ArtifactsView
+                key={page.paths.join("\n")}
+                paths={page.paths}
+                scans={artifactScan.scans}
+                onRescan={artifactScan.scan}
               />
             )}
 

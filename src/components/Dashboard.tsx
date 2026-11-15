@@ -11,6 +11,7 @@ const FIX_LABELS: Record<Fix, string> = {
   checkoutDefault: "Check out default",
   reviewUnpushed: "Review",
   cleanup: "Clean up",
+  cleanArtifacts: "Clean up",
 };
 
 const PREVIEW_COUNT = 4;
@@ -19,6 +20,7 @@ interface Props {
   paths: string[];
   states: Record<string, RepoState>;
   healths: Record<string, RepoHealth | undefined>;
+  reclaimable?: Record<string, number | undefined>;
   pendingScans: number;
   lastScannedUnix: number | undefined;
   nowUnix: number;
@@ -71,7 +73,7 @@ function ProblemCard({
 }
 
 export function Dashboard(props: Props) {
-  const overview = buildOverview(props.paths, props.states, props.healths);
+  const overview = buildOverview(props.paths, props.states, props.healths, props.reclaimable);
   const labels = uniqueLabels(props.paths);
   const { oldestFetchUnix, neverFetched } = props.freshness;
   const stale = isStale(props.nowUnix, oldestFetchUnix) || neverFetched > 0;

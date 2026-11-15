@@ -77,6 +77,25 @@ function mockFleet() {
         return { ...clean, ...summaries[path] };
       case "repo_health":
         return { ...noHealth, ...healths[path] };
+      case "scan_artifacts":
+        return {
+          artifacts:
+            path === "/src/web"
+              ? [
+                  {
+                    path: "/src/web/node_modules",
+                    worktree: "/src/web",
+                    kind: "Node.js packages",
+                    tier: "reinstall",
+                    bytes: 3_000_000,
+                    sharedBytes: 0,
+                    files: 40,
+                    modifiedUnix: null,
+                  },
+                ]
+              : [],
+          warnings: [],
+        };
       case "run_action":
         return {
           outcome: { status: "succeeded", message: `${(args.action as Action).type} done` },
@@ -189,6 +208,23 @@ describe("Dashboard", () => {
         "/src/docs",
       ]),
     );
+  });
+
+  it("opens build cleanup from the reclaimable space card", async () => {
+    const user = userEvent.setup();
+    mockFleet();
+    render(<App />);
+    const region = await overview();
+    const card = await within(region).findByLabelText(
+      "3.0 MB of build and dependency directories in 1 repository",
+    );
+    await user.click(within(card).getByRole("button", { name: "Clean up" }));
+
+    expect(await screen.findByText("Build & dependency cleanup")).toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "Needs reinstalling" }));
+    expect(
+      screen.getByRole("checkbox", { name: "Select /src/web/node_modules" }),
+    ).not.toBeChecked();
   });
 
   it("navigates between sections from the sidebar", async () => {

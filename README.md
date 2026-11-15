@@ -32,16 +32,19 @@ Your fleet of Git clones, under one command. A cross-platform desktop app to kee
   - Shows branches as a tree grouped by `/`, with folder-level selection.
   - Compares against `upstream/<default>` when an `upstream` remote exists, so fork branches merged upstream are recognized.
 - **Unpushed work and stashes**: per repository, lists branches with commits that exist on no remote (noting ones whose changes were already merged), uncommitted changes in any worktree, and stashes, which can be dropped after confirmation.
+- **Build and dependency cleanup** frees disk space by deleting regenerable directories inside repositories and their linked worktrees: build output (Maven and Cargo `target`, `dist`, `.next`, `__pycache__`, .NET `bin`/`obj`, and similar), directories that need reinstalling (`node_modules`, Gradle `build` and `.gradle`, `.tox`, `.terraform`, `vendor`), and Python virtualenvs. Each kind is recognized by its name and its project file (for example `target` next to `pom.xml`). Sizes leave out hard-linked files, such as pnpm's, because deleting them frees nothing. Only build output is shown at first, and directories unchanged for a configurable number of days are preselected; the other two categories can be shown and are never preselected. Directories are deleted permanently by default, or can be moved to the Trash instead.
 - **Worktree cleanup** works like branch cleanup: clean worktrees whose branch is merged are preselected (optionally deleting the branch), worktrees whose directory is gone are pruned, and stale or active unmerged worktrees can be removed while keeping their branch, so no commits are lost.
 
 ## Screenshots
 
-|                                                                                                                     |                                                                                                                                       |
-| ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| ![Repositories list with three selected and the action bar pinned to the bottom](docs/screenshots/repositories.png) | ![Branch and worktree cleanup with merged, squash-merged, remote-deleted, and stale branches in a tree](docs/screenshots/cleanup.png) |
-| **Repositories**: filter, sort, select, and run an action on many repositories at once.                             | **Branch & worktree cleanup**: merged branches are found even after squash and rebase merges.                                         |
-| ![A branch's commits and diff in the repository details panel](docs/screenshots/branch-diff.png)                    | ![Remotes page with each remote checked and a bulk URL editor](docs/screenshots/remotes.png)                                          |
-| **Branch details**: see what an unmerged branch contains before deleting it.                                        | **Remotes**: check every remote, fix moved ones, and rewrite URLs in bulk.                                                            |
+|                                                                                                                                 |                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| ![Repositories list with three selected and the action bar pinned to the bottom](docs/screenshots/repositories.png)             | ![Branch and worktree cleanup with merged, squash-merged, remote-deleted, and stale branches in a tree](docs/screenshots/cleanup.png) |
+| **Repositories**: filter, sort, select, and run an action on many repositories at once.                                         | **Branch & worktree cleanup**: merged branches are found even after squash and rebase merges.                                         |
+| ![A branch's commits and diff in the repository details panel](docs/screenshots/branch-diff.png)                                | ![Remotes page with each remote checked and a bulk URL editor](docs/screenshots/remotes.png)                                          |
+| **Branch details**: see what an unmerged branch contains before deleting it.                                                    | **Remotes**: check every remote, fix moved ones, and rewrite URLs in bulk.                                                            |
+| ![Disk cleanup listing dist, node_modules, a virtualenv, and .terraform with sizes and ages](docs/screenshots/disk-cleanup.png) | ![Disk cleanup after deleting dist, reporting the space freed](docs/screenshots/disk-cleanup-deleted.png)                             |
+| **Disk cleanup**: find build output, dependencies, and virtualenvs that git ignores, with their sizes.                          | **After deleting**: each result says what was removed and how much space it freed.                                                    |
 
 The screenshots use the made-up repositories from `pnpm demo`; see [docs/demo.md](docs/demo.md).
 
@@ -54,6 +57,7 @@ The screenshots use the made-up repositories from `pnpm demo`; see [docs/demo.md
 - The default branch, the checked-out branch, and branches checked out in other worktrees are never deleted.
 - Only local branches are deleted. Deletion is re-verified at the time it runs, and deleting an unmerged branch requires explicit confirmation. Deleted branch SHAs are reported so they can be recreated.
 - Worktrees with uncommitted or untracked files, locked worktrees, and the main worktree are never removed.
+- Build and dependency directories are deleted only when they match a known kind, git ignores everything inside them, nothing in them is tracked, and they contain no git repository. This is re-checked when deletion runs, symlinks are never followed, and deletion is permanent unless **Move to Trash instead of deleting** is checked (moved directories free their space only when the Trash is emptied). Every deletion is recorded in the activity log.
 
 ## Requirements
 

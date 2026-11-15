@@ -1,3 +1,4 @@
+import { commandText } from "../activityLog";
 import type { CommandRecord } from "../types";
 
 export function CommandLog({ commands }: { commands: CommandRecord[] }) {
@@ -6,7 +7,7 @@ export function CommandLog({ commands }: { commands: CommandRecord[] }) {
     <ol className="command-log">
       {commands.map((command, index) => (
         <li key={index} className={command.exitCode === 0 ? "" : "command-failed"}>
-          <code>git {command.args.join(" ")}</code>
+          <code>{commandText(command)}</code>
           <span className="exit-code">exit {command.exitCode ?? "signal"}</span>
           {command.stdout.trim() && <pre>{command.stdout.trim()}</pre>}
           {command.stderr.trim() && <pre className="stderr">{command.stderr.trim()}</pre>}

@@ -81,6 +81,30 @@ impl Builder {
         fs::write(path, contents)
     }
 
+    fn build_output(
+        &self,
+        dir: &Path,
+        file: &str,
+        kilobytes: usize,
+        days_ago: f64,
+    ) -> io::Result<()> {
+        self.write(dir, file, &"x".repeat(kilobytes * 1000))?;
+        let modified =
+            UNIX_EPOCH + Duration::from_secs((self.now - (days_ago * DAY as f64) as i64) as u64);
+        fs::File::options()
+            .write(true)
+            .open(dir.join(file))?
+            .set_modified(modified)?;
+        let mut ancestor = dir.join(file);
+        while ancestor.pop() && ancestor != dir {
+            // Windows can't open a directory as a file; ages there show the demo's build time.
+            if let Ok(handle) = fs::File::open(&ancestor) {
+                let _ = handle.set_modified(modified);
+            }
+        }
+        Ok(())
+    }
+
     fn commit(
         &self,
         dir: &Path,
@@ -517,6 +541,8 @@ pub fn write_demo_home(root: &Path) -> io::Result<DemoEnv> {
         "libraries/shared-utils",
         &[
             ("README.md", &readme("shared-utils"), 500.0),
+            (".gitignore", "node_modules/\ndist/\n.venv/\n", 500.0),
+            ("package.json", "{ \"name\": \"shared-utils\" }\n", 500.0),
             (
                 "src/strings.ts",
                 "export const trim = (s: string) => s.trim();\n",
@@ -525,6 +551,17 @@ pub fn write_demo_home(root: &Path) -> io::Result<DemoEnv> {
         ],
     )?;
     b.git(&work, &["fetch", "--quiet"])?;
+    b.build_output(&work, "dist/strings.js", 40, 120.0)?;
+    b.build_output(&work, "dist/strings.d.ts", 4, 120.0)?;
+    b.build_output(&work, "node_modules/typescript/lib/typescript.js", 900, 2.0)?;
+    b.build_output(&work, "node_modules/left-pad/index.js", 1, 2.0)?;
+    b.build_output(&work, ".venv/pyvenv.cfg", 1, 30.0)?;
+    b.build_output(
+        &work,
+        ".venv/lib/site-packages/mkdocs/__init__.py",
+        200,
+        30.0,
+    )?;
 
     // A fork whose upstream has moved on.
     let (_, _) = b.repo(
@@ -594,7 +631,14 @@ pub fn write_demo_home(root: &Path) -> io::Result<DemoEnv> {
         &[
             ("README.md", &readme("infra-terraform"), 600.0),
             ("main.tf", "terraform {}\n", 45.0),
+            (".gitignore", ".terraform/\n", 45.0),
         ],
+    )?;
+    b.build_output(
+        &work,
+        ".terraform/providers/registry.terraform.io/hashicorp/aws/terraform-provider-aws",
+        2500,
+        45.0,
     )?;
     b.set_fetched(&work, 3 * DAY)?;
 
@@ -659,6 +703,7 @@ mod tests {
 
     use super::*;
     use crate::actions::summarize;
+    use crate::artifacts::Tier;
     use crate::git::Git;
     use crate::health::repo_health;
     use crate::status::InProgressOperation;
@@ -744,6 +789,32 @@ mod tests {
             summary("shared-utils").await.status.working_tree.behind,
             Some(0)
         );
+        let artifacts = |name: &str| {
+            let path = by_name[name].clone();
+            async move {
+                crate::artifacts::scan(&mut Git::new(path))
+                    .await
+                    .unwrap()
+                    .artifacts
+                    .into_iter()
+                    .map(|a| (a.kind, a.tier))
+                    .collect::<Vec<_>>()
+            }
+        };
+        assert_eq!(
+            artifacts("shared-utils").await,
+            [
+                ("Python virtualenv", Tier::Unreproducible),
+                ("Distribution output", Tier::BuildOutput),
+                ("Node.js packages", Tier::Reinstall),
+            ]
+        );
+        assert_eq!(
+            artifacts("infra-terraform").await,
+            [("Terraform", Tier::Reinstall)]
+        );
+        let shared = summary("shared-utils").await.status.working_tree;
+        assert_eq!((shared.tracked_changes, shared.untracked), (0, 0));
         assert_eq!(summary("dotfiles").await.status.working_tree.upstream, None);
         assert!(
             summary("infra-terraform")

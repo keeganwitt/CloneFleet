@@ -51,6 +51,10 @@ pub enum SkipReason {
     NoRemote,
     AlreadyExists,
     Cancelled,
+    NotIgnored,
+    NotArtifact,
+    ContainsRepository,
+    TierHidden,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]

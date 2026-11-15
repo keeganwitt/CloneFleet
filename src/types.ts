@@ -51,7 +51,11 @@ export type SkipReason =
   | "notOnDefaultBranch"
   | "noRemote"
   | "alreadyExists"
-  | "cancelled";
+  | "cancelled"
+  | "notIgnored"
+  | "notArtifact"
+  | "containsRepository"
+  | "tierHidden";
 
 export type Outcome =
   | { status: "succeeded"; message: string }
@@ -66,6 +70,7 @@ export type FailureReason =
   | "timedOut";
 
 export interface CommandRecord {
+  kind?: "git" | "filesystem";
   args: string[];
   exitCode: number | null;
   stdout: string;
@@ -274,4 +279,22 @@ export interface RemoteCheck {
   status: RemoteStatus;
   redirectUrl: string | null;
   message: string | null;
+}
+
+export type ArtifactTier = "buildOutput" | "reinstall" | "unreproducible";
+
+export interface Artifact {
+  path: string;
+  worktree: string;
+  kind: string;
+  tier: ArtifactTier;
+  bytes: number;
+  sharedBytes: number;
+  files: number;
+  modifiedUnix: number | null;
+}
+
+export interface ArtifactReport {
+  artifacts: Artifact[];
+  warnings: string[];
 }
