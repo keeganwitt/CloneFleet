@@ -236,6 +236,7 @@ export interface AppSettings {
 export interface CloneRisks {
   hasRemotes: boolean;
   unpushedBranches: string[];
+  unpushedDetachedHeads: { worktree: string; sha: string; commits: number }[];
   stashes: number;
   dirtyWorktrees: string[];
   linkedWorktreesOutside: string[];
@@ -244,11 +245,17 @@ export interface CloneRisks {
   ignoredFileCount: number;
 }
 
+export interface CloneReview {
+  risks: CloneRisks;
+  snapshot: string;
+}
+
 export interface CloneActivity {
   identities: string[];
   lastCommitByMeUnix: number | null;
   lastLocalActivityUnix: number | null;
   risks: CloneRisks;
+  snapshot: string;
   warnings: string[];
 }
 

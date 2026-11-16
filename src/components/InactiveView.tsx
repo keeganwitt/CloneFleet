@@ -173,7 +173,10 @@ export function InactiveView({ paths, onRemoved }: Props) {
       const outcomes = await Promise.all(
         targets.map(async ([repo, activity]): Promise<[string, ItemOutcome[]]> => {
           try {
-            const result = await api.trashClone(repo, activity.risks);
+            const result = await api.trashClone(repo, {
+              risks: activity.risks,
+              snapshot: activity.snapshot,
+            });
             recordAction(
               repo,
               "Move clone to the Trash",

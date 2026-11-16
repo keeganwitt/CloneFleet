@@ -37,7 +37,7 @@ use cleanup::CleanupResult;
 use diff::{BranchDiff, FileDiff};
 use git::Git;
 use health::RepoHealth;
-use inactive::{CloneActivity, CloneRisks};
+use inactive::{CloneActivity, CloneReview};
 use remote_health::{RemoteCheck, RemoteInfo};
 use store::{BranchSettings, Config};
 use unpushed::UnpushedReport;
@@ -569,7 +569,7 @@ async fn clone_activity(
 #[tauri::command]
 async fn trash_clone(
     path: PathBuf,
-    reviewed: CloneRisks,
+    reviewed: CloneReview,
     state: State<'_, AppState>,
 ) -> Result<CleanupResult, String> {
     let git = state.git(&path)?;

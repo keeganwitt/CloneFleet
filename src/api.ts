@@ -14,7 +14,7 @@ import type {
   BranchSettings,
   CleanupResult,
   CloneActivity,
-  CloneRisks,
+  CloneReview,
   FileChange,
   FileDiff,
   RemoteCheck,
@@ -78,7 +78,7 @@ export const api = {
   repoHealth: (path: string, staleDays: number) =>
     invoke<RepoHealth>("repo_health", { path, staleDays }),
   cloneActivity: (path: string) => invoke<CloneActivity>("clone_activity", { path }),
-  trashClone: (path: string, reviewed: CloneRisks) =>
+  trashClone: (path: string, reviewed: CloneReview) =>
     invoke<CleanupResult>("trash_clone", { path, reviewed }),
   branchDiff: (path: string, branch: string, base?: string) =>
     invoke<BranchDiff>("branch_diff", { path, branch, base: base ?? null }),

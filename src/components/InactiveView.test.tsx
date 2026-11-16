@@ -11,6 +11,7 @@ const now = Math.floor(Date.now() / 1000);
 const noRisks: CloneRisks = {
   hasRemotes: true,
   unpushedBranches: [],
+  unpushedDetachedHeads: [],
   stashes: 0,
   dirtyWorktrees: [],
   linkedWorktreesOutside: [],
@@ -28,13 +29,19 @@ const activity = (
   lastCommitByMeUnix: commitDaysAgo === null ? null : now - commitDaysAgo * DAY,
   lastLocalActivityUnix: activityDaysAgo === null ? null : now - activityDaysAgo * DAY,
   risks: { ...noRisks, ...risks },
+  snapshot: "review-snapshot",
   warnings: [],
 });
 
 const activities: Record<string, CloneActivity> = {
   "/p/abandoned": activity(400, 400),
   "/p/reference": activity(null, 3),
-  "/p/risky": activity(200, 200, { stashes: 1, ignoredFiles: [".env"], ignoredFileCount: 1 }),
+  "/p/risky": activity(200, 200, {
+    stashes: 1,
+    ignoredFiles: [".env"],
+    ignoredFileCount: 1,
+    unpushedDetachedHeads: [{ worktree: "/p/risky", sha: "abcdef0123456789", commits: 1 }],
+  }),
   "/p/active": activity(2, 2),
 };
 
@@ -85,6 +92,9 @@ describe("InactiveView", () => {
     await waitFor(() => expect(rowNames()).toEqual(["abandoned", "risky"]));
     expect(screen.getByText("2 of 4 repositories look inactive")).toBeInTheDocument();
     expect(screen.getByText("1 stash")).toBeInTheDocument();
+    expect(
+      screen.getByText("1 unpushed commit on detached HEAD abcdef0123 in /p/risky"),
+    ).toBeInTheDocument();
 
     const user = userEvent.setup();
     await user.click(screen.getByLabelText("Last local activity older than"));
@@ -124,11 +134,20 @@ describe("InactiveView", () => {
     const dialog = calls.find((c) => c.cmd === "plugin:dialog|message");
     expect(dialog?.args.message).toContain("1 clone has work that would only be in the Trash");
     expect(dialog?.args.message).toContain("Ignored files git can't restore: .env");
+    expect(dialog?.args.message).toContain(
+      "1 unpushed commit on detached HEAD abcdef0123 in /p/risky",
+    );
     await waitFor(() => expect(onRemoved).toHaveBeenCalledWith(["/p/abandoned", "/p/risky"]));
     const trashed = calls.filter((c) => c.cmd === "trash_clone");
     expect(trashed.map((c) => c.args)).toEqual([
-      { path: "/p/abandoned", reviewed: activities["/p/abandoned"].risks },
-      { path: "/p/risky", reviewed: activities["/p/risky"].risks },
+      {
+        path: "/p/abandoned",
+        reviewed: { risks: activities["/p/abandoned"].risks, snapshot: "review-snapshot" },
+      },
+      {
+        path: "/p/risky",
+        reviewed: { risks: activities["/p/risky"].risks, snapshot: "review-snapshot" },
+      },
     ]);
     expect(screen.getByText("Moved /p/abandoned to the Trash")).toBeInTheDocument();
     expect(screen.queryAllByRole("row")).toHaveLength(0);

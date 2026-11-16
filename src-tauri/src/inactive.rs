@@ -1,4 +1,7 @@
 use std::collections::BTreeSet;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -8,7 +11,7 @@ use crate::artifacts::{Removal, is_artifact, usable_worktrees};
 use crate::branches::load_worktrees;
 use crate::cleanup::{CleanupResult, ItemOutcome};
 use crate::git::{CommandRecord, Git, GitError, REFLOG_ACTION};
-use crate::unpushed::analyze_unpushed;
+use crate::unpushed::{analyze_unpushed, list_stashes};
 
 const SHOWN_IGNORED_FILES: usize = 20;
 const OS_METADATA_FILES: &[&str] = &[".DS_Store", "Thumbs.db", "desktop.ini"];
@@ -19,12 +22,28 @@ const LEGACY_PULL_SUBJECT: &str = "pull --no-rebase --ff-only --no-autostash --p
 pub struct CloneRisks {
     pub has_remotes: bool,
     pub unpushed_branches: Vec<String>,
+    pub unpushed_detached_heads: Vec<DetachedHead>,
     pub stashes: u32,
     pub dirty_worktrees: Vec<PathBuf>,
     pub linked_worktrees_outside: Vec<PathBuf>,
     pub nested_repos: Vec<PathBuf>,
     pub ignored_files: Vec<PathBuf>,
     pub ignored_file_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DetachedHead {
+    pub worktree: PathBuf,
+    pub sha: String,
+    pub commits: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CloneReview {
+    pub risks: CloneRisks,
+    pub snapshot: String,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -34,6 +53,7 @@ pub struct CloneActivity {
     pub last_commit_by_me_unix: Option<i64>,
     pub last_local_activity_unix: Option<i64>,
     pub risks: CloneRisks,
+    pub snapshot: String,
     pub warnings: Vec<String>,
 }
 
@@ -196,6 +216,26 @@ pub async fn clone_risks(
 ) -> Result<(CloneRisks, Vec<String>), GitError> {
     let repo = git.repo().to_path_buf();
     let unpushed = analyze_unpushed(git, false).await?;
+    let worktrees = load_worktrees(git).await?;
+    let mut unpushed_detached_heads = Vec::new();
+    for worktree in usable_worktrees(&worktrees).filter(|w| w.branch.is_none()) {
+        let Some(sha) = &worktree.head else {
+            continue;
+        };
+        let commits = git
+            .run_ok(&["rev-list", "--count", sha, "--not", "--remotes"])
+            .await?
+            .trim()
+            .parse::<u32>()
+            .map_err(std::io::Error::other)?;
+        if commits > 0 {
+            unpushed_detached_heads.push(DetachedHead {
+                worktree: worktree.path.clone(),
+                sha: sha.clone(),
+                commits,
+            });
+        }
+    }
     let root = canonical(&repo);
     let linked_worktrees_outside = worktree_roots(git)
         .await?
@@ -218,6 +258,7 @@ pub async fn clone_risks(
             .filter(|b| b.merged.is_none())
             .map(|b| b.name)
             .collect(),
+        unpushed_detached_heads,
         stashes: u32::try_from(unpushed.stashes.len()).unwrap_or(u32::MAX),
         dirty_worktrees: unpushed.dirty_worktrees,
         linked_worktrees_outside,
@@ -228,6 +269,100 @@ pub async fn clone_risks(
     Ok((risks, unpushed.warnings))
 }
 
+fn hash_path(path: &Path, hasher: &mut DefaultHasher) -> std::io::Result<()> {
+    path.hash(hasher);
+    let metadata = path.symlink_metadata()?;
+    metadata.file_type().hash(hasher);
+    if metadata.is_symlink() {
+        std::fs::read_link(path)?.hash(hasher);
+    } else if metadata.is_dir() {
+        let mut children = std::fs::read_dir(path)?
+            .map(|entry| entry.map(|entry| entry.path()))
+            .collect::<Result<Vec<_>, _>>()?;
+        children.sort();
+        for child in children {
+            hash_path(&child, hasher)?;
+        }
+    } else if metadata.is_file() {
+        metadata.len().hash(hasher);
+        let mut file = std::fs::File::open(path)?;
+        let mut buffer = [0; 64 * 1024];
+        loop {
+            let read = file.read(&mut buffer)?;
+            if read == 0 {
+                break;
+            }
+            hasher.write(&buffer[..read]);
+        }
+    }
+    Ok(())
+}
+
+async fn clone_snapshot(git: &mut Git) -> Result<String, GitError> {
+    let mut hasher = DefaultHasher::new();
+    git.run_ok(&["for-each-ref", "--format=%(refname)%00%(objectname)"])
+        .await?
+        .hash(&mut hasher);
+    for stash in list_stashes(git).await? {
+        stash.sha.hash(&mut hasher);
+    }
+    let worktrees = load_worktrees(git).await?;
+    let mut paths = BTreeSet::new();
+    for worktree in usable_worktrees(&worktrees) {
+        worktree.path.hash(&mut hasher);
+        worktree.head.hash(&mut hasher);
+        worktree.branch.hash(&mut hasher);
+        let mut worktree_git = git.at(&worktree.path);
+        worktree_git
+            .run_ok(&["status", "--porcelain=v1", "-z", "--untracked-files=all"])
+            .await?
+            .hash(&mut hasher);
+        worktree_git
+            .run_ok(&["ls-files", "--stage", "-z"])
+            .await?
+            .hash(&mut hasher);
+        let modified = worktree_git
+            .run_ok(&[
+                "ls-files",
+                "-z",
+                "--modified",
+                "--others",
+                "--exclude-standard",
+            ])
+            .await?;
+        for relative in modified.split('\0').filter(|path| !path.is_empty()) {
+            let path = worktree.path.join(relative);
+            match path.symlink_metadata() {
+                Ok(_) => {
+                    paths.insert(path);
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        for relative in ignored_files(&mut worktree_git, &worktree.path).await? {
+            paths.insert(worktree.path.join(relative));
+        }
+    }
+    tokio::task::spawn_blocking(move || {
+        for path in paths {
+            hash_path(&path, &mut hasher)?;
+        }
+        Ok(format!("{:016x}", hasher.finish()))
+    })
+    .await
+    .map_err(std::io::Error::other)?
+}
+
+async fn review_clone(
+    git: &mut Git,
+    known_repos: &BTreeSet<PathBuf>,
+) -> Result<(CloneReview, Vec<String>), GitError> {
+    let snapshot = clone_snapshot(git).await?;
+    let (risks, warnings) = clone_risks(git, known_repos).await?;
+    Ok((CloneReview { risks, snapshot }, warnings))
+}
+
 pub async fn clone_activity(
     git: &mut Git,
     extra_identities: &[String],
@@ -236,7 +371,7 @@ pub async fn clone_activity(
     let identities = resolve_identities(git, extra_identities).await?;
     let last_commit_by_me_unix = last_commit_by(git, &identities).await?;
     let last_local_activity_unix = last_local_activity(git).await?;
-    let (risks, mut warnings) = clone_risks(git, known_repos).await?;
+    let (reviewed, mut warnings) = review_clone(git, known_repos).await?;
     if identities.is_empty() {
         warnings.push(
             "No git identity is configured here; set user.email or add one in Settings".into(),
@@ -246,7 +381,8 @@ pub async fn clone_activity(
         identities,
         last_commit_by_me_unix,
         last_local_activity_unix,
-        risks,
+        risks: reviewed.risks,
+        snapshot: reviewed.snapshot,
         warnings,
     })
 }
@@ -302,14 +438,14 @@ fn removal_outcome(removal: Removal, shown: &str, result: Result<(), String>) ->
 
 async fn remove_clone(
     git: &mut Git,
-    reviewed: &CloneRisks,
+    reviewed: &CloneReview,
     removal: Removal,
     known_repos: &BTreeSet<PathBuf>,
 ) -> Result<Outcome, GitError> {
     if let Some(refused) = check_repository_root(git).await? {
         return Ok(refused);
     }
-    let (current, _) = clone_risks(git, known_repos).await?;
+    let (current, _) = review_clone(git, known_repos).await?;
     if &current != reviewed {
         return Ok(Outcome::skipped(
             SkipReason::ChangedSinceReview,
@@ -330,7 +466,7 @@ async fn remove_clone(
 
 pub async fn trash_clone(
     mut git: Git,
-    reviewed: &CloneRisks,
+    reviewed: &CloneReview,
     removal: Removal,
     known_repos: &BTreeSet<PathBuf>,
 ) -> Result<CleanupResult, GitError> {
@@ -458,6 +594,153 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn reports_unpushed_detached_heads_in_main_and_linked_worktrees() {
+        let fixture = Fixture::new();
+        let work = &fixture.work;
+        let linked = fixture.root().join("linked");
+        fixture.git(
+            work,
+            &[
+                "worktree",
+                "add",
+                "--quiet",
+                "--detach",
+                linked.to_str().unwrap(),
+            ],
+        );
+        fixture.git(work, &["switch", "--quiet", "--detach"]);
+        let known = [work.clone()].into();
+
+        let (pushed, _) = clone_risks(&mut Git::new(work), &known).await.unwrap();
+        assert!(pushed.unpushed_detached_heads.is_empty());
+
+        fixture.commit(work, "main-only.txt", "main\n", "main detached");
+        fixture.commit(&linked, "linked-only.txt", "linked\n", "linked detached");
+        let (risks, _) = clone_risks(&mut Git::new(work), &known).await.unwrap();
+        assert!(risks.unpushed_branches.is_empty());
+        assert!(risks.dirty_worktrees.is_empty());
+        assert_eq!(risks.unpushed_detached_heads.len(), 2);
+        for (head, path) in risks.unpushed_detached_heads.iter().zip([work, &linked]) {
+            assert_eq!(canonical(&head.worktree), canonical(path));
+            assert_eq!(head.sha, fixture.git(path, &["rev-parse", "HEAD"]));
+            assert_eq!(head.commits, 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn rejects_new_commits_on_an_already_unpushed_branch() {
+        let fixture = Fixture::new();
+        let work = &fixture.work;
+        fixture.git(work, &["switch", "--quiet", "-c", "local"]);
+        fixture.commit(work, "first.txt", "one\n", "first");
+        let known = [work.clone()].into();
+        let (reviewed, _) = review_clone(&mut Git::new(work), &known).await.unwrap();
+        fixture.commit(work, "second.txt", "two\n", "second");
+        assert_changed_since_review(work, &known, &reviewed).await;
+    }
+
+    #[tokio::test]
+    async fn rejects_a_replaced_stash_with_the_same_count() {
+        let fixture = Fixture::new();
+        let work = &fixture.work;
+        fs::write(work.join("README.md"), "first stash\n").unwrap();
+        fixture.git(work, &["stash", "push", "--quiet"]);
+        let known = [work.clone()].into();
+        let (reviewed, _) = review_clone(&mut Git::new(work), &known).await.unwrap();
+        fixture.git(work, &["stash", "drop", "--quiet"]);
+        fs::write(work.join("README.md"), "second stash\n").unwrap();
+        fixture.git(work, &["stash", "push", "--quiet"]);
+        assert_changed_since_review(work, &known, &reviewed).await;
+    }
+
+    #[tokio::test]
+    async fn rejects_content_changes_without_a_change_in_risk_categories() {
+        let fixture = Fixture::new();
+        let work = &fixture.work;
+        fs::write(work.join(".gitignore"), ".env\n").unwrap();
+        fs::write(work.join(".env"), "first secret\n").unwrap();
+        fs::write(work.join("README.md"), "first edit\n").unwrap();
+        fs::write(work.join("untracked.bin"), [0, 255, 1]).unwrap();
+        let known = [work.clone()].into();
+        for (file, contents) in [
+            ("README.md", b"second edit\n".as_slice()),
+            ("untracked.bin", &[0, 254, 1]),
+            (".env", b"second secret\n".as_slice()),
+        ] {
+            let (reviewed, _) = review_clone(&mut Git::new(work), &known).await.unwrap();
+            fs::write(work.join(file), contents).unwrap();
+            assert_changed_since_review(work, &known, &reviewed).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn rejects_changes_to_the_index_and_linked_worktree_contents() {
+        let fixture = Fixture::new();
+        let work = &fixture.work;
+        let linked = fixture.root().join("linked");
+        fixture.git(
+            work,
+            &[
+                "worktree",
+                "add",
+                "--quiet",
+                "-b",
+                "side",
+                linked.to_str().unwrap(),
+            ],
+        );
+        fs::write(linked.join("README.md"), "first edit\n").unwrap();
+        let known = [work.clone()].into();
+        let (reviewed, _) = review_clone(&mut Git::new(work), &known).await.unwrap();
+        fs::write(linked.join("README.md"), "second edit\n").unwrap();
+        assert_changed_since_review(work, &known, &reviewed).await;
+
+        fixture.git(&linked, &["add", "README.md"]);
+        fs::write(linked.join("README.md"), "working copy\n").unwrap();
+        let (reviewed, _) = review_clone(&mut Git::new(work), &known).await.unwrap();
+        fs::write(linked.join("README.md"), "different staged content\n").unwrap();
+        fixture.git(&linked, &["add", "README.md"]);
+        fs::write(linked.join("README.md"), "working copy\n").unwrap();
+        assert_changed_since_review(work, &known, &reviewed).await;
+    }
+
+    #[tokio::test]
+    async fn snapshot_is_stable_and_ignores_regenerable_artifacts() {
+        let fixture = Fixture::new();
+        let work = &fixture.work;
+        fs::write(work.join("package.json"), "{}\n").unwrap();
+        fs::write(work.join(".gitignore"), "node_modules/\n").unwrap();
+        fs::create_dir(work.join("node_modules")).unwrap();
+        fs::write(work.join("node_modules/generated.txt"), "first\n").unwrap();
+        let known = [work.clone()].into();
+        let (reviewed, _) = review_clone(&mut Git::new(work), &known).await.unwrap();
+        fs::write(work.join("node_modules/generated.txt"), "second\n").unwrap();
+        let (current, _) = review_clone(&mut Git::new(work), &known).await.unwrap();
+        assert_eq!(reviewed, current);
+    }
+
+    async fn assert_changed_since_review(
+        work: &Path,
+        known: &BTreeSet<PathBuf>,
+        reviewed: &CloneReview,
+    ) {
+        let (current, _) = review_clone(&mut Git::new(work), known).await.unwrap();
+        assert_eq!(current.risks, reviewed.risks);
+        assert_ne!(current.snapshot, reviewed.snapshot);
+        let result = trash_clone(Git::new(work), reviewed, Removal::Delete, known)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result.items[0].outcome,
+            Outcome::Skipped {
+                reason: SkipReason::ChangedSinceReview,
+                ..
+            }
+        ));
+        assert!(work.exists());
+    }
+
+    #[tokio::test]
     async fn local_activity_ignores_what_clonefleet_did() {
         let fixture = Fixture::new();
         let work = &fixture.work;
@@ -571,6 +854,7 @@ mod tests {
             CloneRisks {
                 has_remotes: true,
                 unpushed_branches: vec!["local-only".into()],
+                unpushed_detached_heads: vec![],
                 stashes: 1,
                 dirty_worktrees: vec![canonical(work)],
                 linked_worktrees_outside: vec![canonical(&outside)],
@@ -586,7 +870,7 @@ mod tests {
         let fixture = Fixture::new();
         let work = fixture.work.clone();
         let known: BTreeSet<PathBuf> = [work.clone()].into();
-        let (reviewed, _) = clone_risks(&mut Git::new(&work), &known).await.unwrap();
+        let (reviewed, _) = review_clone(&mut Git::new(&work), &known).await.unwrap();
 
         fs::write(work.join("new.txt"), "new\n").unwrap();
         let refused = trash_clone(Git::new(&work), &reviewed, Removal::Delete, &known)
@@ -640,7 +924,7 @@ mod tests {
 
         for path in [&sub, &linked] {
             let known: BTreeSet<PathBuf> = [path.clone()].into();
-            let (reviewed, _) = clone_risks(&mut Git::new(path), &known).await.unwrap();
+            let (reviewed, _) = review_clone(&mut Git::new(path), &known).await.unwrap();
             let result = trash_clone(Git::new(path), &reviewed, Removal::Delete, &known)
                 .await
                 .unwrap();

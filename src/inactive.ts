@@ -63,6 +63,11 @@ export function describeRisks(risks: CloneRisks): string[] {
     );
   }
   if (risks.stashes > 0) lines.push(plural(risks.stashes, "stash", "stashes"));
+  for (const head of risks.unpushedDetachedHeads) {
+    lines.push(
+      `${plural(head.commits, "unpushed commit")} on detached HEAD ${head.sha.slice(0, 10)} in ${head.worktree}`,
+    );
+  }
   if (risks.dirtyWorktrees.length > 0) {
     lines.push(`Uncommitted changes in ${risks.dirtyWorktrees.join(", ")}`);
   }

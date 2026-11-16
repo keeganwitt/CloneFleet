@@ -8,6 +8,7 @@ const now = 1_800_000_000;
 const noRisks: CloneRisks = {
   hasRemotes: true,
   unpushedBranches: [],
+  unpushedDetachedHeads: [],
   stashes: 0,
   dirtyWorktrees: [],
   linkedWorktreesOutside: [],
@@ -21,6 +22,7 @@ const activity = (commitDaysAgo: number | null, activityDaysAgo: number | null):
   lastCommitByMeUnix: commitDaysAgo === null ? null : now - commitDaysAgo * DAY,
   lastLocalActivityUnix: activityDaysAgo === null ? null : now - activityDaysAgo * DAY,
   risks: noRisks,
+  snapshot: "review-snapshot",
   warnings: [],
 });
 
@@ -75,11 +77,21 @@ describe("describeRisks", () => {
     expect(describeRisks(noRisks)).toEqual([]);
   });
 
+  it("warns about unpushed detached HEAD commits", () => {
+    expect(
+      describeRisks({
+        ...noRisks,
+        unpushedDetachedHeads: [{ worktree: "/x/repo", sha: "abcdef0123456789", commits: 2 }],
+      }),
+    ).toEqual(["2 unpushed commits on detached HEAD abcdef0123 in /x/repo"]);
+  });
+
   it("lists everything that would be lost", () => {
     expect(
       describeRisks({
         hasRemotes: false,
         unpushedBranches: ["spike", "wip"],
+        unpushedDetachedHeads: [],
         stashes: 1,
         dirtyWorktrees: ["/x/repo"],
         linkedWorktreesOutside: ["/x/repo-feature"],
