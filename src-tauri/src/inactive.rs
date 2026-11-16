@@ -558,7 +558,14 @@ mod tests {
         );
         let known: BTreeSet<PathBuf> = [work.clone(), nested.clone()].into();
 
-        let (risks, _) = clone_risks(&mut Git::new(work), &known).await.unwrap();
+        let (mut risks, _) = clone_risks(&mut Git::new(work), &known).await.unwrap();
+        for path in risks
+            .dirty_worktrees
+            .iter_mut()
+            .chain(&mut risks.linked_worktrees_outside)
+        {
+            *path = path.canonicalize().unwrap();
+        }
         assert_eq!(
             risks,
             CloneRisks {
