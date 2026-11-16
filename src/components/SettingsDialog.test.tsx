@@ -15,6 +15,7 @@ const view: SettingsView = {
     terminal: null,
     editor: null,
     webHosts: [],
+    extraIdentities: [],
   },
   detectedGit: "/opt/homebrew/bin/git",
   activeGit: { path: "/opt/homebrew/bin/git", version: "git version 2.56.0", error: null },
@@ -128,6 +129,23 @@ describe("SettingsDialog", () => {
       terminal: { app: "/Applications/Ghostty.app", args: "--working-directory={path}" },
       editor: { app: "/Applications/Zed.app", args: "{path}" },
       webHosts: [{ host: "gitlab-work", webUrl: "https://gitlab.example.com" }],
+    });
+  });
+
+  it("saves extra identities one per line", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsDialog view={view} onSave={onSave} onClose={() => {}} />);
+
+    await user.type(
+      screen.getByLabelText("Extra identities"),
+      "old@example.com{Enter}{Enter}  Me Myself  ",
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onSave).toHaveBeenCalledWith({
+      ...view.settings,
+      extraIdentities: ["old@example.com", "Me Myself"],
     });
   });
 

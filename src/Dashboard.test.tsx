@@ -60,6 +60,7 @@ function mockFleet() {
             terminal: null,
             editor: null,
             webHosts: [],
+            extraIdentities: [],
           },
           detectedGit: "/usr/bin/git",
           activeGit: { path: "/usr/bin/git", version: "git version 2.56.0", error: null },

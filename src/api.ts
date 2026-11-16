@@ -13,6 +13,8 @@ import type {
   BranchReport,
   BranchSettings,
   CleanupResult,
+  CloneActivity,
+  CloneRisks,
   FileChange,
   FileDiff,
   RemoteCheck,
@@ -75,6 +77,9 @@ export const api = {
   checkRemotes: (path: string) => invoke<RemoteCheck[]>("check_remotes", { path }),
   repoHealth: (path: string, staleDays: number) =>
     invoke<RepoHealth>("repo_health", { path, staleDays }),
+  cloneActivity: (path: string) => invoke<CloneActivity>("clone_activity", { path }),
+  trashClone: (path: string, reviewed: CloneRisks) =>
+    invoke<CleanupResult>("trash_clone", { path, reviewed }),
   branchDiff: (path: string, branch: string, base?: string) =>
     invoke<BranchDiff>("branch_diff", { path, branch, base: base ?? null }),
   workingFileDiff: (path: string, file: string, untracked: boolean) =>

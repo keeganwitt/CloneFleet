@@ -10,6 +10,7 @@ mod discovery;
 mod fork;
 mod git;
 mod health;
+mod inactive;
 mod launch;
 mod remote_health;
 mod remotes;
@@ -36,6 +37,7 @@ use cleanup::CleanupResult;
 use diff::{BranchDiff, FileDiff};
 use git::Git;
 use health::RepoHealth;
+use inactive::{CloneActivity, CloneRisks};
 use remote_health::{RemoteCheck, RemoteInfo};
 use store::{BranchSettings, Config};
 use unpushed::UnpushedReport;
@@ -544,6 +546,48 @@ async fn working_file_diff(
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn clone_activity(
+    path: PathBuf,
+    state: State<'_, AppState>,
+) -> Result<CloneActivity, String> {
+    let mut git = state.git(&path)?;
+    let extra = state
+        .config
+        .lock()
+        .unwrap()
+        .settings
+        .extra_identities
+        .clone();
+    let known = state.repos.lock().unwrap().clone();
+    let _permit = state.permits.acquire().await.map_err(|e| e.to_string())?;
+    inactive::clone_activity(&mut git, &extra, &known)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn trash_clone(
+    path: PathBuf,
+    reviewed: CloneRisks,
+    state: State<'_, AppState>,
+) -> Result<CleanupResult, String> {
+    let git = state.git(&path)?;
+    let known = state.repos.lock().unwrap().clone();
+    let result = {
+        let _permit = state.permits.acquire().await.map_err(|e| e.to_string())?;
+        inactive::trash_clone(git, &reviewed, Removal::Trash, &known)
+            .await
+            .map_err(|e| e.to_string())?
+    };
+    if !path.exists() {
+        state
+            .change_workspace(|config| config.forget_repo(&path))
+            .await?;
+    }
+    Ok(result)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -591,7 +635,9 @@ pub fn run() {
             list_remotes,
             check_remotes,
             branch_diff,
-            working_file_diff
+            working_file_diff,
+            clone_activity,
+            trash_clone
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

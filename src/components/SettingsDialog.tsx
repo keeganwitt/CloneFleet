@@ -76,6 +76,7 @@ export function SettingsDialog({ view, onSave, onClose }: Props) {
     view.settings.editor ?? { app: "", args: "{path}" },
   );
   const [webHosts, setWebHosts] = useState(formatWebHosts(view.settings.webHosts));
+  const [extraIdentities, setExtraIdentities] = useState(view.settings.extraIdentities.join("\n"));
   const [check, setCheck] = useState<GitInfo>();
   const [error, setError] = useState<string>();
 
@@ -104,6 +105,10 @@ export function SettingsDialog({ view, onSave, onClose }: Props) {
         terminal: toTarget(terminal),
         editor: toTarget(editor),
         webHosts: parseWebHosts(webHosts),
+        extraIdentities: extraIdentities
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean),
       });
       onClose();
     } catch (failure) {
@@ -155,6 +160,20 @@ export function SettingsDialog({ view, onSave, onClose }: Props) {
             {active.version ? ` (${active.version})` : ""}
           </p>
           {active.error && <p className="error">{active.error}</p>}
+          <label className="web-hosts">
+            Also count commits by these emails or names as mine, one per line
+            <textarea
+              aria-label="Extra identities"
+              rows={2}
+              placeholder="old-me@example.com"
+              value={extraIdentities}
+              onChange={(event) => setExtraIdentities(event.target.value)}
+            />
+          </label>
+          <p className="muted">
+            Each repository&apos;s own <code>user.email</code> always counts. Used by Inactive
+            clones.
+          </p>
         </fieldset>
         <fieldset>
           <legend>Workspace</legend>

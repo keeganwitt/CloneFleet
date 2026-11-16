@@ -13,6 +13,7 @@ import { RemotesView } from "./components/RemotesView";
 import { RepoRow } from "./components/RepoRow";
 import { RunSummaryBar } from "./components/RunSummaryBar";
 import { SettingsDialog } from "./components/SettingsDialog";
+import { InactiveView } from "./components/InactiveView";
 import { UnpushedView } from "./components/UnpushedView";
 import { WorkspaceBar } from "./components/WorkspaceBar";
 import { defaultFilters, matchesFilters, type Filters } from "./filters";
@@ -39,6 +40,7 @@ type Page =
   | { kind: "cleanup"; paths: string[] }
   | { kind: "artifacts"; paths: string[] }
   | { kind: "unpushed"; paths: string[] }
+  | { kind: "inactive"; paths: string[] }
   | { kind: "remotes"; paths: string[] }
   | { kind: "activity" };
 
@@ -175,6 +177,7 @@ function App() {
     (page.kind === "cleanup" ||
       page.kind === "artifacts" ||
       page.kind === "unpushed" ||
+      page.kind === "inactive" ||
       page.kind === "remotes") &&
     page.paths.length < state.order.length
       ? page
@@ -185,6 +188,7 @@ function App() {
     [{ kind: "cleanup", paths: state.order }, "Branch cleanup"],
     [{ kind: "artifacts", paths: state.order }, "Disk cleanup"],
     [{ kind: "unpushed", paths: state.order }, "Unpushed work"],
+    [{ kind: "inactive", paths: state.order }, "Inactive clones"],
     [{ kind: "remotes", paths: state.order }, "Remotes"],
     [{ kind: "activity" }, "Activity"],
   ];
@@ -273,11 +277,11 @@ function App() {
 
             <div className="sidebar-heading">Tools</div>
 
-            {navItems.slice(2, 5).map(navButton)}
+            {navItems.slice(2, 6).map(navButton)}
 
             <hr className="sidebar-divider" />
 
-            {navItems.slice(5).map(navButton)}
+            {navItems.slice(6).map(navButton)}
           </nav>
 
           <div className="content">
@@ -386,6 +390,14 @@ function App() {
 
             {page.kind === "unpushed" && (
               <UnpushedView key={page.paths.join("\n")} paths={page.paths} onChanged={changed} />
+            )}
+
+            {page.kind === "inactive" && (
+              <InactiveView
+                key={page.paths.join("\n")}
+                paths={page.paths}
+                onRemoved={() => void manager.reloadWorkspace()}
+              />
             )}
 
             {page.kind === "activity" && <ActivityView />}

@@ -49,4 +49,6 @@ export const SKIP_REASON_LABELS: Record<SkipReason, string> = {
   notArtifact: "not a build directory",
   containsRepository: "contains a repository",
   tierHidden: "category not shown",
+  changedSinceReview: "changed since review",
+  notRepositoryRoot: "not a repository root",
 };

@@ -55,7 +55,9 @@ export type SkipReason =
   | "notIgnored"
   | "notArtifact"
   | "containsRepository"
-  | "tierHidden";
+  | "tierHidden"
+  | "changedSinceReview"
+  | "notRepositoryRoot";
 
 export type Outcome =
   | { status: "succeeded"; message: string }
@@ -228,6 +230,26 @@ export interface AppSettings {
   terminal: LaunchTarget | null;
   editor: LaunchTarget | null;
   webHosts: WebHost[];
+  extraIdentities: string[];
+}
+
+export interface CloneRisks {
+  hasRemotes: boolean;
+  unpushedBranches: string[];
+  stashes: number;
+  dirtyWorktrees: string[];
+  linkedWorktreesOutside: string[];
+  nestedRepos: string[];
+  ignoredFiles: string[];
+  ignoredFileCount: number;
+}
+
+export interface CloneActivity {
+  identities: string[];
+  lastCommitByMeUnix: number | null;
+  lastLocalActivityUnix: number | null;
+  risks: CloneRisks;
+  warnings: string[];
 }
 
 export interface LaunchTarget {

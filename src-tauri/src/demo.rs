@@ -128,6 +128,20 @@ impl Builder {
         path: &str,
         history: &[(&str, &str, f64)],
     ) -> io::Result<(PathBuf, PathBuf)> {
+        self.repo_with(owner, name, path, history, None, 0.0)
+    }
+
+    /// Like `repo`, but `author` writes the history as someone other than Dana, and the
+    /// working clone (with its reflog) is made `cloned_days_ago`.
+    fn repo_with(
+        &self,
+        owner: &str,
+        name: &str,
+        path: &str,
+        history: &[(&str, &str, f64)],
+        author: Option<(&str, &str)>,
+        cloned_days_ago: f64,
+    ) -> io::Result<(PathBuf, PathBuf)> {
         let bare = self.path(&format!("remotes/{owner}/{name}.git"));
         let seed = self.path(&format!(".seeds/{owner}-{name}"));
         let work = self.path(&format!("Projects/{path}"));
@@ -148,15 +162,20 @@ impl Builder {
             &self.root,
             &["init", "--quiet", "-b", "main", &seed.to_string_lossy()],
         )?;
+        if let Some((author_name, author_email)) = author {
+            self.git(&seed, &["config", "user.name", author_name])?;
+            self.git(&seed, &["config", "user.email", author_email])?;
+        }
         for (file, contents, days_ago) in history {
             self.commit(&seed, file, contents, &format!("Update {file}"), *days_ago)?;
         }
         self.git(&seed, &["remote", "add", "origin", &url])?;
         self.git(&seed, &["push", "--quiet", "-u", "origin", "main"])?;
         fs::create_dir_all(work.parent().unwrap())?;
-        self.git(
+        self.git_at(
             &self.root,
             &["clone", "--quiet", &url, &work.to_string_lossy()],
+            cloned_days_ago,
         )?;
         Ok((seed, work))
     }
@@ -682,6 +701,70 @@ pub fn write_demo_home(root: &Path) -> io::Result<DemoEnv> {
         4.0,
     )?;
 
+    // Inactive: Dana's last commit and last checkout here were over a year ago.
+    let (_, work) = b.repo_with(
+        "acme",
+        "old-prototype",
+        "tools/old-prototype",
+        &[
+            ("README.md", &readme("old-prototype"), 520.0),
+            ("src/app.ts", "export const demo = true;\n", 430.0),
+        ],
+        None,
+        425.0,
+    )?;
+    b.git_at(&work, &["switch", "--quiet", "-c", "spike/canvas"], 410.0)?;
+    b.git_at(&work, &["switch", "--quiet", "main"], 400.0)?;
+
+    // A reference clone: never committed to by Dana, but read recently.
+    let (_, work) = b.repo_with(
+        "acme",
+        "protocol-specs",
+        "reference/protocol-specs",
+        &[
+            ("README.md", "# Protocol specs\n", 800.0),
+            ("specs/orders.md", "## Orders v3\n", 12.0),
+        ],
+        Some(("Riley Architect", "riley@example.com")),
+        600.0,
+    )?;
+    b.git_at(&work, &["switch", "--quiet", "--detach", "HEAD~1"], 3.0)?;
+    b.git_at(&work, &["switch", "--quiet", "main"], 3.0)?;
+
+    // Inactive, but moving it to the Trash would lose a stash, an unpushed branch, and `.env`.
+    let (_, work) = b.repo_with(
+        "acme",
+        "ml-experiments",
+        "tools/ml-experiments",
+        &[
+            ("README.md", &readme("ml-experiments"), 400.0),
+            (".gitignore", ".env\n", 400.0),
+            ("train.py", "EPOCHS = 10\n", 380.0),
+        ],
+        None,
+        375.0,
+    )?;
+    b.git_at(
+        &work,
+        &["switch", "--quiet", "-c", "experiment/embeddings"],
+        370.0,
+    )?;
+    b.commit(
+        &work,
+        "embed.py",
+        "DIM = 384\n",
+        "Try sentence embeddings",
+        370.0,
+    )?;
+    b.git_at(&work, &["switch", "--quiet", "main"], 365.0)?;
+    b.write(&work, "train.py", "EPOCHS = 50\n")?;
+    b.git_at(
+        &work,
+        &["stash", "push", "--quiet", "-m", "WIP: longer training"],
+        360.0,
+    )?;
+    b.write(&work, ".env", "OPENAI_API_KEY=sk-demo-not-real\n")?;
+
     let projects = root.join("Projects");
     let config_dir = root.join("config");
     let config = Config {
@@ -706,6 +789,7 @@ mod tests {
     use crate::artifacts::Tier;
     use crate::git::Git;
     use crate::health::repo_health;
+    use crate::inactive::{clone_risks, last_commit_by, last_local_activity};
     use crate::status::InProgressOperation;
     use crate::workspace::scan;
 
@@ -738,6 +822,7 @@ mod tests {
                 "analytics-sdk",
                 "design-system",
                 "shared-utils",
+                "protocol-specs",
                 "api-gateway",
                 "auth-service",
                 "billing-service",
@@ -746,6 +831,8 @@ mod tests {
                 "dotfiles",
                 "infra-terraform",
                 "legacy-portal",
+                "ml-experiments",
+                "old-prototype",
             ]
         );
 
@@ -824,6 +911,43 @@ mod tests {
                 .unwrap()
                 < env_now() - 2 * DAY
         );
+    }
+
+    #[tokio::test]
+    async fn demo_home_has_inactive_and_reference_clones() {
+        let dir = tempfile::tempdir().unwrap();
+        let env = write_demo_home(&dir.path().join("demo")).unwrap();
+        let projects = env.projects;
+        let dana = vec!["dana@example.com".to_string()];
+        let days = |t: Option<i64>| t.map(|t| (env_now() - t) / DAY);
+        let activity = |path: &str| {
+            let path = projects.join(path);
+            let dana = dana.clone();
+            async move {
+                let mut git = Git::new(path);
+                (
+                    days(last_commit_by(&mut git, &dana).await.unwrap()),
+                    days(last_local_activity(&mut git).await.unwrap()),
+                )
+            }
+        };
+
+        assert_eq!(
+            activity("tools/old-prototype").await,
+            (Some(430), Some(400))
+        );
+        assert_eq!(activity("reference/protocol-specs").await, (None, Some(3)));
+        assert_eq!(
+            activity("tools/ml-experiments").await,
+            (Some(360), Some(360))
+        );
+        let ml = projects.join("tools/ml-experiments");
+        let (risks, _) = clone_risks(&mut Git::new(&ml), &[ml.clone()].into())
+            .await
+            .unwrap();
+        assert_eq!(risks.unpushed_branches, ["experiment/embeddings"]);
+        assert_eq!(risks.stashes, 1);
+        assert_eq!(risks.ignored_files, [PathBuf::from(".env")]);
     }
 
     fn env_now() -> i64 {
