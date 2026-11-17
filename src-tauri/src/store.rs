@@ -58,6 +58,12 @@ impl Config {
         fs::write(&temp, serde_json::to_string_pretty(self)?)?;
         fs::rename(temp, path)
     }
+
+    pub fn forget_repo(&mut self, repo: &Path) {
+        self.branch_settings
+            .retain(|path, _| !path.starts_with(repo));
+        self.excluded.retain(|path| !path.starts_with(repo));
+    }
 }
 
 #[cfg(test)]
@@ -73,6 +79,25 @@ mod tests {
         assert_eq!(settings.main_branches("main"), vec!["main", "2.x", "dev"]);
         assert!(!settings.is_empty());
         assert!(BranchSettings::default().is_empty());
+    }
+
+    #[test]
+    fn forgetting_a_repo_drops_its_settings_and_nested_exclusions() {
+        let mut config = Config {
+            excluded: [PathBuf::from("/a/x/nested"), PathBuf::from("/a/xy")].into(),
+            branch_settings: [
+                (PathBuf::from("/a/x"), BranchSettings::default()),
+                (PathBuf::from("/a/y"), BranchSettings::default()),
+            ]
+            .into(),
+            ..Config::default()
+        };
+        config.forget_repo(Path::new("/a/x"));
+        assert_eq!(config.excluded, [PathBuf::from("/a/xy")].into());
+        assert_eq!(
+            config.branch_settings.keys().collect::<Vec<_>>(),
+            vec![&PathBuf::from("/a/y")]
+        );
     }
 
     #[test]

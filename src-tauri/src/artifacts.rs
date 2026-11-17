@@ -185,6 +185,10 @@ fn marker_present(marker: &Marker, dir: &Path, parent: &Path) -> bool {
     }
 }
 
+pub(crate) fn is_artifact(dir: &Path) -> bool {
+    classify(dir).is_some()
+}
+
 fn classify(dir: &Path) -> Option<&'static Rule> {
     let name = dir.file_name()?.to_str()?;
     let parent = dir.parent()?;
@@ -316,7 +320,7 @@ async fn ignored_directories(
         .collect())
 }
 
-fn usable_worktrees(worktrees: &[RawWorktree]) -> impl Iterator<Item = &RawWorktree> {
+pub(crate) fn usable_worktrees(worktrees: &[RawWorktree]) -> impl Iterator<Item = &RawWorktree> {
     worktrees.iter().filter(|w| !w.bare && !w.prunable)
 }
 
@@ -389,14 +393,14 @@ pub enum Removal {
 }
 
 impl Removal {
-    fn log_args(self, path: &str) -> [&str; 2] {
+    pub(crate) fn log_args(self, path: &str) -> [&str; 2] {
         match self {
             Removal::Delete => ["delete", path],
             Removal::Trash => ["move-to-trash", path],
         }
     }
 
-    fn remove(self, path: &Path) -> Result<(), String> {
+    pub(crate) fn remove(self, path: &Path) -> Result<(), String> {
         match self {
             Removal::Delete => fs::remove_dir_all(path).map_err(|e| e.to_string()),
             Removal::Trash => {

@@ -94,6 +94,7 @@ function mockBackend(backend: Backend) {
             terminal: null,
             editor: null,
             webHosts: [],
+            extraIdentities: [],
           },
           detectedGit: "/usr/bin/git",
           activeGit: backend.gitError

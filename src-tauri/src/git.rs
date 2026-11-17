@@ -10,6 +10,7 @@ use crate::store::BranchSettings;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(300);
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(120);
 const NETWORK_COMMANDS: &[&str] = &["fetch", "pull", "push", "ls-remote", "clone"];
+pub const REFLOG_ACTION: &str = "clonefleet";
 
 fn subcommand<'a>(args: &[&'a str]) -> Option<&'a str> {
     let mut rest = args.iter();
@@ -138,6 +139,9 @@ impl Git {
             // With no terminal attached, a credential or passphrase prompt would hang forever.
             .env("GIT_TERMINAL_PROMPT", "0")
             .env("LC_ALL", "C")
+            // Inactive-clone detection skips HEAD reflog entries with this prefix. Without it,
+            // every bulk pull or switch would make the clone look recently used.
+            .env("GIT_REFLOG_ACTION", REFLOG_ACTION)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -202,6 +206,7 @@ pub fn failure_message(record: &CommandRecord) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::Fixture;
 
     fn record(code: Option<i32>, stdout: &str, stderr: &str) -> CommandRecord {
         CommandRecord {
@@ -274,5 +279,34 @@ mod tests {
         let mut git = Git::new(dir.path());
         let err = git.run_ok(&["rev-parse", "--git-dir"]).await.unwrap_err();
         assert!(err.to_string().contains("not a git repository"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn tags_reflog_entries_it_writes() {
+        let fixture = Fixture::new();
+        let work = &fixture.work;
+        fixture.commit(&fixture.seed, "next.txt", "n\n", "next");
+        fixture.git(&fixture.seed, &["push", "--quiet"]);
+        fixture.git(work, &["switch", "--quiet", "-c", "feature"]);
+        fixture.commit(work, "feature.txt", "f\n", "feature");
+        let before = fixture
+            .git(work, &["reflog", "--format=%gs"])
+            .lines()
+            .count();
+
+        let mut git = Git::new(work);
+        git.run_ok(&["switch", "--quiet", "main"]).await.unwrap();
+        git.run_ok(&["pull", "--quiet", "--ff-only"]).await.unwrap();
+        git.run_ok(&["switch", "--quiet", "feature"]).await.unwrap();
+        git.run_ok(&["rebase", "--quiet", "main"]).await.unwrap();
+
+        let subjects = fixture.git(work, &["reflog", "--format=%gs"]);
+        let written: Vec<&str> = subjects.lines().collect();
+        let written = &written[..written.len() - before];
+        assert!(written.len() >= 4, "{subjects}");
+        assert!(
+            written.iter().all(|s| s.starts_with(REFLOG_ACTION)),
+            "{subjects}"
+        );
     }
 }

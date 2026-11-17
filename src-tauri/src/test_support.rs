@@ -83,6 +83,41 @@ impl Fixture {
     pub fn git(&self, repo: &Path, args: &[&str]) -> String {
         run(repo, args)
     }
+
+    /// Also backdates the reflog entry, since git stamps it with the committer date.
+    pub fn git_dated(&self, repo: &Path, days_ago: i64, args: &[&str]) -> String {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let date = format!("@{} +0000", now - days_ago * 86_400);
+        let output = Command::new("git")
+            .current_dir(repo)
+            .args(args)
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .env("GIT_AUTHOR_DATE", &date)
+            .env("GIT_COMMITTER_DATE", &date)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    pub fn commit_as(&self, repo: &Path, author: &str, email: &str, days_ago: i64, file: &str) {
+        fs::write(repo.join(file), file).unwrap();
+        run(repo, &["add", file]);
+        let name = format!("user.name={author}");
+        let email = format!("user.email={email}");
+        self.git_dated(
+            repo,
+            days_ago,
+            &["-c", &name, "-c", &email, "commit", "--quiet", "-m", file],
+        );
+    }
 }
 
 pub fn run(dir: &Path, args: &[&str]) -> String {

@@ -55,6 +55,8 @@ pub enum SkipReason {
     NotArtifact,
     ContainsRepository,
     TierHidden,
+    ChangedSinceReview,
+    NotRepositoryRoot,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]

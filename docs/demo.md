@@ -27,6 +27,9 @@ The repositories come from `src-tauri/src/demo.rs`, which builds them with your 
 | `tools/infra-terraform`    | clean, but last fetched 3 days ago, with an ignored `.terraform` directory                                                                       |
 | `tools/legacy-portal`      | a remote that can't be reached; run **Fetch all** to see the failure card                                                                        |
 | `tools/dotfiles`           | a local-only repository with no remote                                                                                                           |
+| `tools/old-prototype`      | inactive: Dana's last commit and checkout were over a year ago                                                                                   |
+| `tools/ml-experiments`     | inactive, but trashing it would lose a stash, an unpushed branch, and an ignored `.env`                                                          |
+| `reference/protocol-specs` | a reference clone with no commits by Dana, checked out 3 days ago, so **Inactive clones** hides it by default                                    |
 
 The tests in `demo.rs` build the demo home and check each of these states with the same code the dashboard uses. If a change stops the demo from showing one, `cargo test` fails, so update the demo along with the feature.
 

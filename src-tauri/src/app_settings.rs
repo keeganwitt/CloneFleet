@@ -26,6 +26,7 @@ pub struct AppSettings {
     pub terminal: Option<LaunchTarget>,
     pub editor: Option<LaunchTarget>,
     pub web_hosts: Vec<WebHost>,
+    pub extra_identities: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -45,6 +46,7 @@ impl Default for AppSettings {
             terminal: None,
             editor: None,
             web_hosts: Vec::new(),
+            extra_identities: Vec::new(),
         }
     }
 }
