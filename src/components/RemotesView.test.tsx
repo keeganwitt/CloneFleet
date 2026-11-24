@@ -2,7 +2,7 @@ import { mockIPC } from "@tauri-apps/api/mocks";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { RemoteInfo } from "../types";
+import type { Action, Outcome, RemoteInfo } from "../types";
 import { RemotesView } from "./RemotesView";
 
 const remotes: Record<string, RemoteInfo[]> = {
@@ -50,7 +50,9 @@ function mockRemotes({ confirmed = true } = {}) {
 }
 
 function renderView() {
-  const runJobs = vi.fn().mockResolvedValue(undefined);
+  const runJobs = vi.fn(async (jobs: [string, Action][]): Promise<Outcome[]> =>
+    jobs.map(() => ({ status: "succeeded" as const, message: "Updated" })),
+  );
   render(<RemotesView paths={["/src/api", "/src/web"]} runJobs={runJobs} />);
   return runJobs;
 }
@@ -92,6 +94,7 @@ describe("RemotesView", () => {
     const user = userEvent.setup();
     mockRemotes();
     const runJobs = renderView();
+    await user.click(screen.getByRole("button", { name: "Edit URLs…" }));
     await user.type(await screen.findByLabelText("Find"), "old-org");
     await user.type(screen.getByLabelText("Replace with"), "new-org");
 
@@ -121,6 +124,7 @@ describe("RemotesView", () => {
     await user.selectOptions(screen.getByLabelText("Filter by remote name"), "upstream");
     expect(screen.queryByText("git@github.com:me/web.git")).not.toBeInTheDocument();
     expect(screen.getByText("1 of 3 remotes")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit URLs…" }));
     await user.type(screen.getByLabelText("Find"), "old-org");
     await user.type(screen.getByLabelText("Replace with"), "new-org");
     expect(
@@ -149,10 +153,26 @@ describe("RemotesView", () => {
     expect(screen.queryByText("OK")).not.toBeInTheDocument();
   });
 
+  it("reports failures instead of counting attempted updates as successes", async () => {
+    const user = userEvent.setup();
+    mockRemotes();
+    const runJobs = renderView();
+    runJobs.mockResolvedValueOnce([
+      { status: "succeeded", message: "Updated" },
+      { status: "failed", message: "Could not write the repository configuration" },
+    ]);
+    await user.click(screen.getByRole("button", { name: "Edit URLs…" }));
+    await user.type(screen.getByLabelText("Find"), "old-org");
+    await user.type(screen.getByLabelText("Replace with"), "new-org");
+    await user.click(screen.getByRole("button", { name: "Apply 2 changes" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Updated 1 remote URL · 1 failed");
+  });
+
   it("converts HTTPS remotes to SSH and respects a cancelled confirmation", async () => {
     const user = userEvent.setup();
     mockRemotes({ confirmed: false });
     const runJobs = renderView();
+    await user.click(screen.getByRole("button", { name: "Edit URLs…" }));
     await user.click(await screen.findByRole("radio", { name: "HTTPS → SSH" }));
     const planned = screen.getByRole("list", { name: "Planned URL changes" });
     expect(planned).toHaveTextContent("git@github.com:old-org/api.git");

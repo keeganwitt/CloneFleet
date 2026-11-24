@@ -126,27 +126,24 @@ describe("Dashboard", () => {
     render(<App />);
     const region = await overview();
 
-    expect(region).toHaveTextContent("5 repositories · 4 need attention");
+    expect(region).toHaveTextContent("5 repositories across 1 directory");
+    expect(within(region).getByRole("button", { name: "4 repositories" })).toBeInTheDocument();
     const attention = within(region).getByRole("list", { name: "Needs attention" });
     expect(
       within(attention).getByLabelText("1 repository stopped mid-operation"),
-    ).toHaveTextContent("infra");
+    ).toHaveTextContent("Git operation in progress");
     expect(
       within(attention).getByLabelText("1 branch with unpushed commits in 1 repository"),
-    ).toHaveTextContent("docs");
+    ).toHaveTextContent("Unpushed commits");
     const updates = within(region).getByRole("list", { name: "Updates available" });
     expect(within(updates).getByLabelText("2 repositories behind upstream")).toHaveTextContent(
-      "api, web",
+      "Behind upstream",
     );
-    const housekeeping = within(region).getByRole("list", { name: "Housekeeping" });
+    const housekeeping = within(region).getByRole("list", { name: "Cleanup" });
     expect(
       within(housekeeping).getByLabelText("3 branches merged in 2 repositories"),
     ).toBeInTheDocument();
-    expect(
-      within(within(region).getByRole("list", { name: "Up to date" })).getByLabelText(
-        "1 up to date and clean",
-      ),
-    ).toHaveTextContent("1 repository is up to date and cleanlib");
+    expect(within(region).getByText(/clean and in sync at last fetch/)).toBeInTheDocument();
   });
 
   it("pulls every repository on the behind card and rechecks them", async () => {
@@ -155,7 +152,14 @@ describe("Dashboard", () => {
     render(<App />);
     const region = await overview();
     const card = within(region).getByLabelText("2 repositories behind upstream");
-    await user.click(within(card).getByRole("button", { name: "Pull all" }));
+    await user.click(within(card).getByRole("button", { name: "View behind repositories" }));
+    await user.click(screen.getByLabelText("Select all matching repositories"));
+    await user.click(screen.getByRole("button", { name: "Pull…" }));
+    const review = screen.getByRole("dialog", { name: "Review pull" });
+    expect(review).toHaveTextContent("/src/api");
+    expect(review).toHaveTextContent("/src/web");
+    expect(calls.filter((call) => call.cmd === "run_action")).toHaveLength(0);
+    await user.click(within(review).getByRole("button", { name: "Pull 2 repositories" }));
 
     await waitFor(() =>
       expect(calls.filter((c) => c.cmd === "run_action").map((c) => c.args)).toEqual([
@@ -179,9 +183,9 @@ describe("Dashboard", () => {
     render(<App />);
     const region = await overview();
     const card = within(region).getByLabelText("2 repositories behind upstream");
-    await user.click(within(card).getByRole("button", { name: "Show" }));
+    await user.click(within(card).getByRole("button", { name: "View behind repositories" }));
 
-    expect(screen.getByText("Showing: 2 repositories behind upstream")).toBeInTheDocument();
+    expect(screen.getByText("2 repositories behind upstream")).toBeInTheDocument();
     expect(screen.getByText("api")).toBeInTheDocument();
     expect(screen.getByText("web")).toBeInTheDocument();
     expect(screen.queryByText("lib")).not.toBeInTheDocument();
@@ -190,7 +194,7 @@ describe("Dashboard", () => {
       "page",
     );
 
-    await user.click(screen.getByRole("button", { name: "Show all repositories" }));
+    await user.click(screen.getByRole("button", { name: "Clear repository filter" }));
     expect(screen.getByText("lib")).toBeInTheDocument();
   });
 
@@ -200,9 +204,11 @@ describe("Dashboard", () => {
     render(<App />);
     const region = await overview();
     const card = within(region).getByLabelText("3 branches merged in 2 repositories");
-    await user.click(within(card).getByRole("button", { name: "Clean up" }));
+    await user.click(within(card).getByRole("button", { name: "Review merged branches" }));
 
-    expect(await screen.findByText("Branch & worktree cleanup")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("region", { name: "Branches and worktrees" }),
+    ).toBeInTheDocument();
     await waitFor(() =>
       expect(calls.filter((c) => c.cmd === "analyze_branches").map((c) => c.args.path)).toEqual([
         "/src/lib",
@@ -219,10 +225,10 @@ describe("Dashboard", () => {
     const card = await within(region).findByLabelText(
       "3.0 MB of build and dependency directories in 1 repository",
     );
-    await user.click(within(card).getByRole("button", { name: "Clean up" }));
+    await user.click(within(card).getByRole("button", { name: "Review disk space" }));
 
-    expect(await screen.findByText("Build & dependency cleanup")).toBeInTheDocument();
-    await user.click(screen.getByRole("checkbox", { name: "Needs reinstalling" }));
+    expect(await screen.findByRole("region", { name: "Disk space" })).toBeInTheDocument();
+
     expect(
       screen.getByRole("checkbox", { name: "Select /src/web/node_modules" }),
     ).not.toBeChecked();

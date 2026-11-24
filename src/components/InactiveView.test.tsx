@@ -129,14 +129,14 @@ describe("InactiveView", () => {
     await waitFor(() => expect(rowNames()).toEqual(["abandoned", "risky"]));
 
     await user.click(screen.getByLabelText("Select all shown clones"));
-    await user.click(screen.getByRole("button", { name: "Move 2 clones to the Trash" }));
+    await user.click(screen.getByRole("button", { name: "Review 2 clones…" }));
+    const dialog = screen.getByRole("dialog", { name: "Review clones to move to Trash" });
+    expect(dialog).toHaveTextContent("Local data in 1 clone");
+    expect(dialog).toHaveTextContent("Ignored files git can't restore: .env");
+    expect(dialog).toHaveTextContent("1 unpushed commit on detached HEAD abcdef0123 in /p/risky");
+    expect(calls.some((c) => c.cmd === "trash_clone")).toBe(false);
+    await user.click(within(dialog).getByRole("button", { name: "Move 2 clones to Trash" }));
 
-    const dialog = calls.find((c) => c.cmd === "plugin:dialog|message");
-    expect(dialog?.args.message).toContain("1 clone has work that would only be in the Trash");
-    expect(dialog?.args.message).toContain("Ignored files git can't restore: .env");
-    expect(dialog?.args.message).toContain(
-      "1 unpushed commit on detached HEAD abcdef0123 in /p/risky",
-    );
     await waitFor(() => expect(onRemoved).toHaveBeenCalledWith(["/p/abandoned", "/p/risky"]));
     const trashed = calls.filter((c) => c.cmd === "trash_clone");
     expect(trashed.map((c) => c.args)).toEqual([
@@ -161,9 +161,10 @@ describe("InactiveView", () => {
     await waitFor(() => expect(rowNames()).toEqual(["abandoned", "risky"]));
 
     await user.click(screen.getByLabelText("Select abandoned"));
-    await user.click(screen.getByRole("button", { name: "Move 1 clone to the Trash" }));
+    await user.click(screen.getByRole("button", { name: "Review 1 clone…" }));
+    await user.click(screen.getByRole("button", { name: "Back to selection" }));
 
-    await waitFor(() => expect(calls.some((c) => c.cmd === "plugin:dialog|message")).toBe(true));
+    expect(screen.getByLabelText("Select abandoned")).toBeChecked();
     expect(calls.some((c) => c.cmd === "trash_clone")).toBe(false);
     expect(onRemoved).not.toHaveBeenCalled();
   });

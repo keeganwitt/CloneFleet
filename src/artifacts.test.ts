@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, isPreselected, reclaimableBytes, relativeTo } from "./artifacts";
+import { formatBytes, reclaimableBytes, relativeTo } from "./artifacts";
 import type { Artifact } from "./types";
-
-const DAY = 86_400;
-const now = 1_000 * DAY;
 
 const artifact = (overrides: Partial<Artifact> = {}): Artifact => ({
   path: "/repo/target",
@@ -13,18 +10,8 @@ const artifact = (overrides: Partial<Artifact> = {}): Artifact => ({
   bytes: 1_000,
   sharedBytes: 0,
   files: 1,
-  modifiedUnix: now - 100 * DAY,
+  modifiedUnix: 123,
   ...overrides,
-});
-
-describe("isPreselected", () => {
-  it("preselects only build output unchanged for the threshold", () => {
-    expect(isPreselected(artifact(), now, 90)).toBe(true);
-    expect(isPreselected(artifact({ modifiedUnix: now - 10 * DAY }), now, 90)).toBe(false);
-    expect(isPreselected(artifact({ modifiedUnix: null }), now, 90)).toBe(false);
-    expect(isPreselected(artifact({ tier: "reinstall" }), now, 90)).toBe(false);
-    expect(isPreselected(artifact({ tier: "unreproducible" }), now, 90)).toBe(false);
-  });
 });
 
 describe("reclaimableBytes", () => {

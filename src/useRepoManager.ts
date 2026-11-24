@@ -117,7 +117,7 @@ export function useRepoManager() {
       for (const [path, action] of jobs) {
         dispatch({ type: "actionStarted", paths: [path], action: action.type });
       }
-      await Promise.all(
+      return Promise.all(
         jobs.map(async ([path, action]) => {
           let result: ActionResult;
           try {
@@ -132,6 +132,7 @@ export function useRepoManager() {
           recordAction(path, ACTION_LABELS[action.type], result.outcome, result.commands);
           dispatch({ type: "actionFinished", path, result });
           await refreshSummary(path);
+          return result.outcome;
         }),
       );
     },
@@ -150,7 +151,7 @@ export function useRepoManager() {
 
   const runBulk = useCallback(
     (jobs: [path: string, action: Action][]) => {
-      if (jobs.length === 0) return Promise.resolve();
+      if (jobs.length === 0) return Promise.resolve([]);
       const id = nextRunId.current++;
       setLastRun({ id, label: ACTION_LABELS[jobs[0][1].type], paths: jobs.map(([path]) => path) });
       return runActions(jobs, id);

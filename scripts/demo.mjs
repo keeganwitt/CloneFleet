@@ -1,11 +1,9 @@
-// Starts CloneFleet on a demo home of made-up repositories: `pnpm demo [--dir <dir>]
-// [--app <binary>]`. See docs/demo.md.
 import { execFileSync, spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const USAGE = "usage: pnpm demo [--dir <dir>] [--app <clonefleet binary>]";
+const USAGE = "usage: pnpm demo [--dir <dir>] [--app <clonefleet binary>] [--prepare-only]";
 
 export function parseArgs(argv, defaultDir = join(tmpdir(), "clonefleet-demo")) {
   const options = { dir: defaultDir, app: undefined };
@@ -21,6 +19,7 @@ export function parseArgs(argv, defaultDir = join(tmpdir(), "clonefleet-demo")) 
     if (arg === "--") continue;
     else if (arg === "--dir") options.dir = resolve(value());
     else if (arg === "--app") options.app = resolve(value());
+    else if (arg === "--prepare-only") options.prepareOnly = true;
     else throw new Error(`Unknown option ${arg}\n${USAGE}`);
   }
   return options;
@@ -59,7 +58,12 @@ function main() {
     stdio: ["ignore", "pipe", "inherit"],
   });
   const env = JSON.parse(output);
+  if (options.prepareOnly) {
+    console.log(JSON.stringify(env));
+    return;
+  }
   console.log(`Demo home: ${options.dir}`);
+  console.log("Cleanup has three views: Branches & worktrees, Disk space, and Inactive clones.");
   const child = spawn(launch.command, launch.args, {
     env: { ...process.env, ...env },
     shell: launch.shell,

@@ -18,20 +18,8 @@ export const ARTIFACT_TIERS: { value: ArtifactTier; label: string; hint: string 
   },
 ];
 
-export const DEFAULT_TIERS: ArtifactTier[] = ["buildOutput"];
-
-const DAY_SECONDS = 24 * 60 * 60;
-
 export function tierLabel(tier: ArtifactTier): string {
   return ARTIFACT_TIERS.find((t) => t.value === tier)?.label ?? tier;
-}
-
-export function isPreselected(artifact: Artifact, nowUnix: number, unusedDays: number): boolean {
-  return (
-    artifact.tier === "buildOutput" &&
-    artifact.modifiedUnix !== null &&
-    nowUnix - artifact.modifiedUnix >= unusedDays * DAY_SECONDS
-  );
 }
 
 export function reclaimableBytes(artifacts: Artifact[]): number {

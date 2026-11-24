@@ -768,7 +768,10 @@ pub fn write_demo_home(root: &Path) -> io::Result<DemoEnv> {
     let projects = root.join("Projects");
     let config_dir = root.join("config");
     let config = Config {
-        roots: vec![projects.clone()],
+        roots: ["libraries", "reference", "services", "tools"]
+            .iter()
+            .map(|directory| projects.join(directory))
+            .collect(),
         ..Config::default()
     };
     config.save(&config_dir.join("config.json"))?;
@@ -811,6 +814,7 @@ mod tests {
         write_demo_home(&root).expect("rerunning replaces an earlier demo home");
 
         let config = Config::load(&env.config_dir.join("config.json")).unwrap();
+        assert_eq!(config.roots.len(), 4);
         let repos = scan(&config.roots, &config.excluded);
         let names: Vec<String> = repos
             .iter()

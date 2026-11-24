@@ -227,7 +227,7 @@ describe("App", () => {
     await waitFor(() => expect(within(row).getByText("feature")).toBeInTheDocument());
     expect(within(row).getByText("default: main")).toBeInTheDocument();
     expect(within(row).getByText("2 modified")).toBeInTheDocument();
-    expect(within(row).getByText("↑1")).toBeInTheDocument();
+    expect(within(row).getByText("1 ahead")).toBeInTheDocument();
   });
 
   it("opens the detail panel on the changes tab and closes it with Escape", async () => {
@@ -264,7 +264,12 @@ describe("App", () => {
 
     await user.click(screen.getByLabelText("Select alpha"));
     await user.click(screen.getByLabelText("Select gamma"));
-    await user.click(screen.getByRole("button", { name: "Pull" }));
+    await user.click(screen.getByRole("button", { name: "Pull…" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Review pull" })).getByRole("button", {
+        name: /^Pull \d/,
+      }),
+    );
 
     expect(await screen.findAllByText("pull done")).toHaveLength(2);
     expect(actionCalls(calls)).toEqual([
@@ -286,8 +291,14 @@ describe("App", () => {
       },
     });
     await renderRepositories();
-    await user.click(await screen.findByLabelText("Select all"));
-    await user.click(screen.getByRole("button", { name: "Checkout default branch" }));
+    await user.click(await screen.findByLabelText("Select all matching repositories"));
+    await user.click(screen.getByText("More actions"));
+    await user.click(screen.getByRole("button", { name: "Check out default branch…" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Review branch switch" })).getByRole("button", {
+        name: /^Switch \d/,
+      }),
+    );
     await within(screen.getByRole("table")).findByText("2 files with uncommitted changes");
 
     await user.click(screen.getByRole("button", { name: "Commit…" }));
@@ -316,16 +327,21 @@ describe("App", () => {
     await renderRepositories();
     await waitFor(() => expect(screen.getAllByText("feature")).toHaveLength(3));
 
-    await user.click(screen.getByLabelText("Select all"));
+    await user.click(screen.getByLabelText("Select all matching repositories"));
     await user.selectOptions(screen.getByLabelText("Filter by changes"), "clean");
     expect(screen.queryByText("gamma")).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Filter by sync"), "behind");
     expect(screen.queryByText("beta")).not.toBeInTheDocument();
     const bar = screen.getByRole("region", { name: "Selection actions" });
     expect(bar).toHaveTextContent("1 selected");
-    expect(bar).toHaveTextContent("(2 more hidden by filters)");
+    expect(bar).toHaveTextContent("2 hidden by filters");
 
-    await user.click(screen.getByRole("button", { name: "Pull" }));
+    await user.click(screen.getByRole("button", { name: "Pull…" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Review pull" })).getByRole("button", {
+        name: /^Pull \d/,
+      }),
+    );
     await within(screen.getByRole("table")).findByText("pull done");
     expect(actionCalls(calls)).toEqual([["/src/alpha", { type: "pull" }]]);
 
@@ -359,7 +375,8 @@ describe("App", () => {
       pushPlans: { "/src/alpha": forced, "/src/beta": normal },
     });
     await renderRepositories();
-    await user.click(await screen.findByLabelText("Select all"));
+    await user.click(await screen.findByLabelText("Select all matching repositories"));
+    await user.click(screen.getByText("More actions"));
     await user.click(screen.getByRole("button", { name: "Rebase fork on upstream" }));
 
     expect(
@@ -401,7 +418,8 @@ describe("App", () => {
       confirmed: false,
     });
     await renderRepositories();
-    await user.click(await screen.findByLabelText("Select all"));
+    await user.click(await screen.findByLabelText("Select all matching repositories"));
+    await user.click(screen.getByText("More actions"));
     await user.click(screen.getByRole("button", { name: "Rebase fork on upstream" }));
 
     await user.click(await screen.findByRole("button", { name: "Force push to origin…" }));
@@ -420,7 +438,7 @@ describe("App", () => {
     const user = userEvent.setup();
     const calls = mockBackend({ repos: ["/src/alpha"] });
     await renderRepositories();
-    await user.click(await screen.findByLabelText("Select all"));
+    await user.click(await screen.findByLabelText("Select all matching repositories"));
     const summariesBefore = calls.filter((c) => c.cmd === "repo_summary").length;
     await user.click(screen.getByRole("button", { name: "Fetch" }));
 
@@ -439,7 +457,8 @@ describe("App", () => {
       renames: { "/src/alpha": rename },
     });
     await renderRepositories();
-    await user.click(await screen.findByLabelText("Select all"));
+    await user.click(await screen.findByLabelText("Select all matching repositories"));
+    await user.click(screen.getByText("More actions"));
     await user.click(screen.getByRole("button", { name: "Check default branch" }));
 
     expect(
@@ -460,7 +479,8 @@ describe("App", () => {
     const calls = mockBackend({ repos: ["/src/alpha", "/src/beta"] });
     await renderRepositories();
     await user.click(await screen.findByLabelText("Select beta"));
-    await user.click(screen.getByRole("button", { name: "Unpushed work & stashes…" }));
+    await user.click(screen.getByText("More actions"));
+    await user.click(screen.getByRole("button", { name: "Review local work" }));
 
     expect(await screen.findByText("0 of 1 repository have unpushed work")).toBeInTheDocument();
     expect(calls.filter((c) => c.cmd === "analyze_unpushed")).toEqual([
@@ -468,7 +488,7 @@ describe("App", () => {
     ]);
     expect(screen.getByText("Showing 1 of 2 repositories")).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Directories" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Show all repositories" }));
+    await user.click(screen.getByRole("button", { name: "Clear repository scope" }));
     await waitFor(() =>
       expect(calls.filter((c) => c.cmd === "analyze_unpushed").map((c) => c.args.path)).toEqual([
         "/src/beta",
@@ -488,7 +508,8 @@ describe("App", () => {
     });
     await renderRepositories();
     await screen.findByText("alpha");
-    await user.click(screen.getByRole("button", { name: "Open directory…" }));
+    await user.click(screen.getByText("Workspace commands"));
+    await user.click(screen.getByRole("button", { name: "Replace open directories…" }));
 
     expect(await screen.findByText("Opened picked: 1 repository")).toBeInTheDocument();
     expect(screen.getByText("one")).toBeInTheDocument();
@@ -510,7 +531,8 @@ describe("App", () => {
     });
     await renderRepositories();
     const directories = await screen.findByRole("group", { name: "Directories" });
-    expect(directories).toHaveTextContent("a2 repos×b1 repo×");
+    await user.click(within(directories).getByText("Manage directories"));
+    expect(directories).toHaveTextContent("2 repos");
 
     await user.click(screen.getByRole("button", { name: "Remove directory /a" }));
     await waitFor(() => expect(screen.queryByText("one")).not.toBeInTheDocument());
@@ -540,19 +562,51 @@ describe("App", () => {
     expect(screen.getByText("two")).toBeInTheDocument();
   });
 
+  it("keeps workspace scope across the four destinations and repository tabs", async () => {
+    const user = userEvent.setup();
+    const calls = mockBackend({ repos: ["/a/one", "/b/two"], roots: ["/a", "/b"] });
+    await renderRepositories();
+    const side = screen.getByRole("navigation", { name: "Main navigation" });
+    expect(
+      within(side)
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["Overview", "Repositories", "Cleanup", "Activity"]);
+    await user.selectOptions(screen.getByLabelText("Filter by directory"), "/b");
+    await user.click(within(side).getByRole("button", { name: "Overview" }));
+    expect(screen.getByRole("region", { name: "Overview" })).toHaveTextContent("1 repository in b");
+    await user.click(within(side).getByRole("button", { name: "Repositories" }));
+    await user.click(screen.getByRole("button", { name: "Local work" }));
+    expect(within(side).getByRole("button", { name: "Repositories" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(
+      calls.filter((call) => call.cmd === "analyze_unpushed").map((call) => call.args.path),
+    ).toEqual(["/b/two"]);
+    await user.click(within(side).getByRole("button", { name: "Cleanup" }));
+    expect(
+      within(screen.getByRole("navigation", { name: "Cleanup views" }))
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["Branches & worktrees", "Disk space", "Inactive clones"]);
+  });
+
   it("keeps removed subdirectory repositories out until restored", async () => {
     const user = userEvent.setup();
     mockBackend({ repos: ["/src/alpha", "/src/beta"], roots: ["/src"] });
     await renderRepositories();
     await user.click(await screen.findByLabelText("Select alpha"));
+    await user.click(screen.getByText("More actions"));
     await user.click(screen.getByRole("button", { name: "Remove from list" }));
-    expect(await screen.findByText(/1 removed repository/)).toBeInTheDocument();
+    expect(await screen.findByText("Restore 1 hidden repository")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Rescan" }));
+    await user.click(screen.getByText("Manage directories"));
+    await user.click(screen.getByRole("button", { name: "Rescan directories" }));
     await screen.findByText("No new repositories found");
     expect(screen.queryByText("alpha")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Restore" }));
+    await user.click(screen.getByRole("button", { name: "Restore 1 hidden repository" }));
     expect(await screen.findByText("alpha")).toBeInTheDocument();
     expect(screen.queryByText(/removed repositor/)).not.toBeInTheDocument();
   });
@@ -567,8 +621,13 @@ describe("App", () => {
       },
     });
     await renderRepositories();
-    await user.click(await screen.findByRole("button", { name: "Select all 3" }));
-    await user.click(screen.getByRole("button", { name: "Pull" }));
+    await user.click(await screen.findByLabelText("Select all matching repositories"));
+    await user.click(screen.getByRole("button", { name: "Pull…" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Review pull" })).getByRole("button", {
+        name: /^Pull \d/,
+      }),
+    );
 
     const summary = await screen.findByRole("status", { name: "Last run" });
     await waitFor(() => expect(summary).toHaveTextContent("1 failed"));
@@ -583,7 +642,7 @@ describe("App", () => {
     expect(screen.queryByText("beta")).not.toBeInTheDocument();
 
     expect(screen.getByRole("region", { name: "Selection actions" })).toHaveTextContent(
-      "(2 more hidden by filters)",
+      "2 hidden by filters",
     );
     await user.click(screen.getByRole("button", { name: "Fetch" }));
     await waitFor(() =>
@@ -596,8 +655,13 @@ describe("App", () => {
     const user = userEvent.setup();
     mockBackend({ repos: ["/src/alpha"] });
     await renderRepositories();
-    await user.click(await screen.findByRole("button", { name: "Select all 1" }));
-    await user.click(screen.getByRole("button", { name: "Pull" }));
+    await user.click(await screen.findByLabelText("Select all matching repositories"));
+    await user.click(screen.getByRole("button", { name: "Pull…" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Review pull" })).getByRole("button", {
+        name: /^Pull \d/,
+      }),
+    );
     const summary = await screen.findByRole("status", { name: "Last run" });
     await waitFor(() => expect(summary).toHaveTextContent("1 succeeded"));
     expect(summary).toHaveTextContent("pull done");
@@ -607,7 +671,7 @@ describe("App", () => {
     const user = userEvent.setup();
     const calls = mockBackend({ repos: ["/src/alpha", "/src/beta"], slow: true });
     await renderRepositories();
-    await user.click(await screen.findByRole("button", { name: "Select all 2" }));
+    await user.click(await screen.findByLabelText("Select all matching repositories"));
     await user.click(screen.getByRole("button", { name: "Fetch" }));
     const summary = await screen.findByRole("status", { name: "Last run" });
     await user.click(within(summary).getByRole("button", { name: "Cancel" }));
@@ -631,13 +695,13 @@ describe("App", () => {
       screen.getAllByRole("button", { name: /^Open details for / }).map((b) => b.textContent);
     expect(names()).toEqual(["alpha", "beta", "gamma"]);
 
-    await user.click(screen.getByRole("button", { name: "Sync" }));
+    await user.click(screen.getByRole("button", { name: "Upstream" }));
     await waitFor(() => expect(names()).toEqual(["beta", "gamma", "alpha"]));
-    expect(screen.getByRole("columnheader", { name: /Sync/ })).toHaveAttribute(
+    expect(screen.getByRole("columnheader", { name: /Upstream/ })).toHaveAttribute(
       "aria-sort",
       "descending",
     );
-    await user.click(screen.getByRole("button", { name: /Sync/ }));
+    await user.click(screen.getByRole("button", { name: /Upstream/ }));
     expect(names()).toEqual(["alpha", "gamma", "beta"]);
   });
 
@@ -713,6 +777,7 @@ describe("App", () => {
     mockBackend({ repos: ["/src/alpha", "/src/beta"] });
     await renderRepositories();
     await user.click(await screen.findByLabelText("Select alpha"));
+    await user.click(screen.getByText("More actions"));
     await user.click(screen.getByRole("button", { name: "Remove from list" }));
 
     await waitFor(() => expect(screen.queryByText("alpha")).not.toBeInTheDocument());
