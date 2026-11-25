@@ -94,6 +94,10 @@ export function useRepoManager() {
     (path: string) => changeWorkspace(() => api.removeDirectory(path)),
     [changeWorkspace],
   );
+  const closeAllDirectories = useCallback(
+    () => changeWorkspace(api.closeAllDirectories),
+    [changeWorkspace],
+  );
   const rescan = useCallback(
     () =>
       changeWorkspace(api.rescanWorkspace, (added) =>
@@ -184,6 +188,7 @@ export function useRepoManager() {
     clearRecent,
     reloadWorkspace,
     removeDirectory,
+    closeAllDirectories,
     rescan,
     removeRepos,
     restoreExcluded,

@@ -1018,14 +1018,17 @@ h3 .repo-path {
   padding: 10px 12px;
 }
 
-.sidebar-icon {
+.app-icon {
   flex: none;
   width: 16px;
   height: 16px;
+}
+
+.sidebar .app-icon {
   color: var(--muted);
 }
 
-.sidebar nav button[aria-current="page"] .sidebar-icon {
+.sidebar nav button[aria-current="page"] .app-icon {
   color: inherit;
 }
 
@@ -1330,8 +1333,8 @@ select {
   padding-bottom: 4px;
 }
 
-.workspace-subpanel .sidebar-icon,
-.workspace-panel-heading .sidebar-icon {
+.workspace-subpanel .app-icon,
+.workspace-panel-heading .app-icon {
   display: block;
   color: inherit;
   stroke-width: 3px;
@@ -1367,15 +1370,39 @@ select {
   margin-bottom: 22px;
 }
 .dashboard-section h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0 0 9px;
   font-size: 17px;
 }
+
+.dashboard-section h2 .app-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+}
+
+.dashboard-attention h2 .app-icon {
+  color: var(--warning);
+}
+
+.dashboard-work h2 .app-icon {
+  color: var(--accent-text);
+}
 .dashboard-section-title {
-  justify-content: space-between;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
   margin-bottom: 9px;
 }
 .dashboard-section-title h2 {
   margin: 0;
+}
+.dashboard-section-title > .link {
+  padding: 0;
+  font-size: 17px;
 }
 .dashboard-columns {
   display: grid;
@@ -1433,7 +1460,6 @@ select {
 .status-pill.category-merged {
   background: var(--success-surface);
 }
-.status-warning,
 .status-pill.category-remoteDeleted,
 .status-pill.category-stale {
   background: var(--warning-surface);

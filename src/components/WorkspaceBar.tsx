@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { uniqueLabels } from "../format";
 import type { RootView } from "../types";
-import { SidebarIcon } from "./SidebarIcon";
+import { Icon } from "./Icon";
 
 type WorkspacePanel = "scope" | "recent" | "manage";
 
@@ -15,7 +15,8 @@ interface Props {
   onOpen: () => void;
   onOpenRecent: (roots: string[]) => void;
   onClearRecent: () => void;
-  onRemoveDirectory: (path: string) => void;
+  onCloseDirectory: (path: string) => void;
+  onCloseAll: () => void;
   onRescan: () => void;
   onRestoreExcluded: () => void;
 }
@@ -30,7 +31,8 @@ export function WorkspaceBar({
   onOpen,
   onOpenRecent,
   onClearRecent,
-  onRemoveDirectory,
+  onCloseDirectory,
+  onCloseAll,
   onRescan,
   onRestoreExcluded,
 }: Props) {
@@ -107,7 +109,7 @@ export function WorkspaceBar({
         title={directory || undefined}
         onClick={() => (panel ? closePanel() : setPanel("scope"))}
       >
-        <SidebarIcon name="workspace" />
+        <Icon name="workspace" />
         <span className="workspace-trigger-label">{scopeLabel}</span>
         <span className="workspace-chevron" aria-hidden="true" />
       </button>
@@ -123,7 +125,7 @@ export function WorkspaceBar({
           {panel !== "scope" && (
             <div className="workspace-panel-heading">
               <button aria-label="Back to workspace" onClick={() => setPanel("scope")}>
-                <SidebarIcon name="chevronLeft" />
+                <Icon name="chevronLeft" />
               </button>
               <strong>{panelLabel}</strong>
             </div>
@@ -163,14 +165,14 @@ export function WorkspaceBar({
               </button>
               {recent.length > 0 && (
                 <button className="workspace-subpanel" onClick={() => setPanel("recent")}>
-                  Open recent <SidebarIcon name="chevronRight" />
+                  Open recent <Icon name="chevronRight" />
                 </button>
               )}
               {roots.length > 0 && (
                 <>
                   <button onClick={() => activate(onRescan)}>Rescan directories</button>
                   <button className="workspace-subpanel" onClick={() => setPanel("manage")}>
-                    Manage open directories <SidebarIcon name="chevronRight" />
+                    Manage open directories <Icon name="chevronRight" />
                   </button>
                 </>
               )}
@@ -197,10 +199,10 @@ export function WorkspaceBar({
                 <button
                   key={root.path}
                   title={root.path}
-                  aria-label={`Remove directory ${root.path}`}
-                  onClick={() => activate(() => onRemoveDirectory(root.path))}
+                  aria-label={`Close directory ${root.path}`}
+                  onClick={() => activate(() => onCloseDirectory(root.path))}
                 >
-                  Remove {labels.get(root.path)}
+                  Close {labels.get(root.path)}
                 </button>
               ))}
               {excludedCount > 0 && (
@@ -209,6 +211,8 @@ export function WorkspaceBar({
                   {excludedCount === 1 ? "repository" : "repositories"}
                 </button>
               )}
+              <hr />
+              <button onClick={() => activate(onCloseAll)}>Close all directories</button>
             </>
           )}
         </div>

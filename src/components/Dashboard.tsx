@@ -4,6 +4,7 @@ import { isStale } from "../freshness";
 import { PROBLEMS, buildOverview, type Card, type ProblemKind } from "../problems";
 import type { RepoState } from "../state";
 import type { RepoHealth } from "../types";
+import { Icon } from "./Icon";
 
 interface Props {
   paths: string[];
@@ -80,6 +81,7 @@ export function Dashboard(props: Props) {
         ))}
       </ul>
     );
+  const attentionCount = `${needsAttention.length} ${needsAttention.length === 1 ? "repository" : "repositories"}`;
   const healthyLabel = `${healthy.length} ${healthy.length === 1 ? "repository" : "repositories"} clean and in sync at last fetch`;
 
   return (
@@ -118,15 +120,21 @@ export function Dashboard(props: Props) {
         </button>
       </div>
       {(attention.length > 0 || updates.length > 0) && (
-        <section className="dashboard-section">
-          <div className="toolbar dashboard-section-title">
-            <h2>Needs attention</h2>
-            <button
-              className="status-pill status-warning"
-              onClick={() => props.onShow("Needs attention", needsAttention)}
-            >
-              {needsAttention.length} {needsAttention.length === 1 ? "repository" : "repositories"}
-            </button>
+        <section className="dashboard-section dashboard-attention">
+          <div className="dashboard-section-title">
+            <h2>
+              <Icon name="attention" />
+              Needs attention
+            </h2>
+            {attention.length + updates.length > 1 && (
+              <button
+                className="link"
+                aria-label={`View all ${attentionCount} needing attention`}
+                onClick={() => props.onShow("Needs attention", needsAttention)}
+              >
+                ({attentionCount})
+              </button>
+            )}
           </div>
           <div className="finding-panel">
             {list("Needs attention", attention)}
@@ -136,14 +144,20 @@ export function Dashboard(props: Props) {
       )}
       <div className="dashboard-columns">
         {work.length > 0 && (
-          <section className="dashboard-section">
-            <h2>Work in progress</h2>
+          <section className="dashboard-section dashboard-work">
+            <h2>
+              <Icon name="work" />
+              Work in progress
+            </h2>
             {list("Work in progress", work)}
           </section>
         )}
         {housekeeping.length > 0 && (
           <section className="dashboard-section">
-            <h2>Cleanup</h2>
+            <h2>
+              <Icon name="cleanup" />
+              Cleanup
+            </h2>
             {list("Cleanup", housekeeping)}
           </section>
         )}

@@ -68,6 +68,7 @@ function workspaceView(backend: Backend): WorkspaceView {
 
 function mockBackend(backend: Backend) {
   const calls: { cmd: string; args: Record<string, unknown> }[] = [];
+  const availableRepos = [...new Set([...backend.repos, ...(backend.discovered ?? [])])];
   mockIPC((cmd, payload) => {
     const args = (payload ?? {}) as Record<string, unknown>;
     calls.push({ cmd, args });
@@ -117,7 +118,9 @@ function mockBackend(backend: Backend) {
       }
       case "open_recent": {
         backend.roots = args.roots as string[];
-        backend.repos = backend.repos.filter((p) => backend.roots!.some((r) => p.startsWith(r)));
+        backend.repos = availableRepos.filter((p) =>
+          backend.roots!.some((r) => p.startsWith(`${r}/`)),
+        );
         return workspaceView(backend);
       }
       case "add_directories":
@@ -128,6 +131,13 @@ function mockBackend(backend: Backend) {
         const removed = args.path as string;
         backend.roots = (backend.roots ?? defaultRoots(backend)).filter((r) => r !== removed);
         backend.repos = backend.repos.filter((p) => !p.startsWith(`${removed}/`));
+        return workspaceView(backend);
+      }
+      case "close_all_directories": {
+        const previous = backend.roots ?? defaultRoots(backend);
+        if (previous.length) backend.recent = [previous, ...(backend.recent ?? [])];
+        backend.roots = [];
+        backend.repos = [];
         return workspaceView(backend);
       }
       case "clear_recent":
@@ -539,7 +549,7 @@ describe("App", () => {
     await waitFor(() => expect(calls.some((c) => c.cmd === "clear_recent")).toBe(true));
   });
 
-  it("shows open directories with repo counts and removes one", async () => {
+  it("shows open directories with repo counts and closes one", async () => {
     const user = userEvent.setup();
     const calls = mockBackend({
       repos: ["/a/one", "/a/two", "/b/three"],
@@ -550,13 +560,37 @@ describe("App", () => {
     await user.click(workspaceTrigger());
     expect(within(directories).getByRole("button", { name: "a 2 repos" })).toBeVisible();
     expect(within(directories).getByRole("button", { name: "b 1 repo" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Remove directory /a" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Close directory /a" })).not.toBeInTheDocument();
     await user.click(within(directories).getByRole("button", { name: "Manage open directories" }));
 
-    await user.click(screen.getByRole("button", { name: "Remove directory /a" }));
+    await user.click(screen.getByRole("button", { name: "Close directory /a" }));
     await waitFor(() => expect(screen.queryByText("one")).not.toBeInTheDocument());
     expect(screen.getByText("three")).toBeInTheDocument();
     expect(calls.find((c) => c.cmd === "remove_directory")?.args).toEqual({ path: "/a" });
+  });
+
+  it("closes all directories from Activity and can reopen the workspace from recent", async () => {
+    const user = userEvent.setup();
+    const calls = mockBackend({ repos: ["/a/one", "/b/two"], roots: ["/a", "/b"] });
+    await renderRepositories();
+    await screen.findByText("one");
+    await user.click(workspaceTrigger());
+    await user.click(screen.getByRole("button", { name: "b 1 repo" }));
+    await user.click(screen.getByRole("button", { name: "Activity" }));
+    await user.click(workspaceTrigger());
+    await user.click(screen.getByRole("button", { name: "Manage open directories" }));
+    await user.click(screen.getByRole("button", { name: "Close all directories" }));
+
+    expect(await screen.findByText(/No directories open/)).toBeVisible();
+    expect(workspaceTrigger()).toHaveAccessibleName("Workspace (All directories)");
+    expect(calls.filter((call) => call.cmd === "close_all_directories")).toHaveLength(1);
+
+    await user.click(workspaceTrigger());
+    await user.click(screen.getByRole("button", { name: "Open recent" }));
+    await user.click(screen.getByRole("button", { name: "a + b" }));
+    await user.click(screen.getByRole("button", { name: "Repositories" }));
+    expect(await screen.findByText("one")).toBeVisible();
+    expect(await screen.findByText("two")).toBeVisible();
   });
 
   it("tells apart open directories that share a name", async () => {

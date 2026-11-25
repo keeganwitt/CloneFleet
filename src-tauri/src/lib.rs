@@ -281,6 +281,11 @@ async fn remove_directory(
 }
 
 #[tauri::command]
+async fn close_all_directories(state: State<'_, AppState>) -> Result<WorkspaceView, String> {
+    state.change_workspace(Config::close_all).await
+}
+
+#[tauri::command]
 async fn rescan_workspace(state: State<'_, AppState>) -> Result<WorkspaceView, String> {
     state.change_workspace(|_| {}).await
 }
@@ -625,6 +630,7 @@ pub fn run() {
             clear_recent,
             add_directories,
             remove_directory,
+            close_all_directories,
             rescan_workspace,
             remove_repos,
             restore_excluded,

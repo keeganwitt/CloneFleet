@@ -43,7 +43,7 @@ const healths: Record<string, Partial<RepoHealth>> = {
   "/src/docs": { mergedBranches: 1, unpushedBranches: 1 },
 };
 
-function mockFleet() {
+function mockFleet({ summaries: repoSummaries = summaries, healths: repoHealth = healths } = {}) {
   const calls: { cmd: string; args: Record<string, unknown> }[] = [];
   mockIPC((cmd, payload) => {
     const args = (payload ?? {}) as Record<string, unknown>;
@@ -75,9 +75,9 @@ function mockFleet() {
           recent: [],
         };
       case "repo_summary":
-        return { ...clean, ...summaries[path] };
+        return { ...clean, ...repoSummaries[path] };
       case "repo_health":
-        return { ...noHealth, ...healths[path] };
+        return { ...noHealth, ...repoHealth[path] };
       case "scan_artifacts":
         return {
           artifacts:
@@ -122,12 +122,16 @@ async function overview() {
 
 describe("Dashboard", () => {
   it("lands on the overview with problem cards grouped by section", async () => {
+    const user = userEvent.setup();
     mockFleet();
     render(<App />);
     const region = await overview();
 
     expect(region).toHaveTextContent("5 repositories across 1 directory");
-    expect(within(region).getByRole("button", { name: "4 repositories" })).toBeInTheDocument();
+    const count = within(region).getByRole("button", {
+      name: "View all 4 repositories needing attention",
+    });
+    expect(count).toHaveTextContent("(4 repositories)");
     const attention = within(region).getByRole("list", { name: "Needs attention" });
     expect(
       within(attention).getByLabelText("1 repository stopped mid-operation"),
@@ -144,6 +148,26 @@ describe("Dashboard", () => {
       within(housekeeping).getByLabelText("3 branches merged in 2 repositories"),
     ).toBeInTheDocument();
     expect(within(region).getByText(/clean and in sync at last fetch/)).toBeInTheDocument();
+
+    await user.click(count);
+    expect(screen.getByRole("table")).toBeVisible();
+    for (const name of ["api", "web", "infra", "docs"])
+      expect(screen.getByText(name)).toBeVisible();
+    expect(screen.queryByText("lib")).not.toBeInTheDocument();
+  });
+
+  it("shows the behind count only on the finding when it is the sole attention finding", async () => {
+    mockFleet({
+      summaries: { "/src/api": { behind: 3 }, "/src/web": { behind: 1 } },
+      healths: {},
+    });
+    render(<App />);
+    const region = await overview();
+
+    expect(within(region).getByText("2 repositories behind upstream")).toBeVisible();
+    expect(
+      within(region).queryByRole("button", { name: "View all 2 repositories needing attention" }),
+    ).not.toBeInTheDocument();
   });
 
   it("pulls every repository on the behind card and rechecks them", async () => {

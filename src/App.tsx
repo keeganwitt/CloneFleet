@@ -14,7 +14,7 @@ import { RemotesView } from "./components/RemotesView";
 import { RepoRow } from "./components/RepoRow";
 import { RunSummaryBar } from "./components/RunSummaryBar";
 import { SettingsDialog } from "./components/SettingsDialog";
-import { SidebarIcon } from "./components/SidebarIcon";
+import { Icon } from "./components/Icon";
 import { InactiveView } from "./components/InactiveView";
 import { UnpushedView } from "./components/UnpushedView";
 import { WorkspaceBar } from "./components/WorkspaceBar";
@@ -228,11 +228,11 @@ function App() {
       setReview({ paths: targets, action });
     else void runOn(targets, action);
   };
-  const changeDirectory = (path: string) => {
+  const changeDirectory = (path: string, kind = page.kind) => {
     setDirectory(path);
     setPathFilter(undefined);
     setResultFilter(undefined);
-    setPage({ kind: page.kind });
+    setPage({ kind });
     manager.setSelection([...state.selected], false);
   };
   const refreshScope = () => {
@@ -273,9 +273,15 @@ function App() {
             void manager.openRecent(roots);
           }}
           onClearRecent={manager.clearRecent}
-          onRemoveDirectory={(path) => {
+          onCloseDirectory={(path) => {
             if (directory === path) changeDirectory("");
             void manager.removeDirectory(path);
+          }}
+          onCloseAll={() => {
+            changeDirectory("", "overview");
+            setFilters(defaultFilters);
+            setDetail(undefined);
+            void manager.closeAllDirectories();
           }}
           onRescan={manager.rescan}
           onRestoreExcluded={manager.restoreExcluded}
@@ -287,7 +293,7 @@ function App() {
               aria-current={section === kind ? "page" : undefined}
               onClick={() => navigate(kind)}
             >
-              <SidebarIcon name={kind} />
+              <Icon name={kind} />
               {label}
               {kind === "activity" && (runSummary?.running ?? 0) > 0 && (
                 <span className="activity-count"> {runSummary?.running}</span>
@@ -296,7 +302,7 @@ function App() {
           ))}
         </nav>
         <button disabled={!settings.view} onClick={() => setShowSettings(true)}>
-          <SidebarIcon name="settings" />
+          <Icon name="settings" />
           Settings
         </button>
       </aside>
