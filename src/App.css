@@ -974,16 +974,17 @@ h3 .repo-path {
 .workspace-dropdown > .workspace-trigger {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
   min-height: 33px;
-  padding: 4px 10px;
+  padding: 4px 8px;
   border: 1px solid var(--border);
   background: var(--surface);
 }
 
-.workspace-trigger > span:first-child {
+.workspace-trigger-label {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1007,7 +1008,21 @@ h3 .repo-path {
 
 .sidebar nav button,
 .sidebar > button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 10px 12px;
+}
+
+.sidebar-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+
+.sidebar nav button[aria-current="page"] .sidebar-icon {
+  color: inherit;
 }
 
 .sidebar nav button[aria-current="page"] {
@@ -1016,7 +1031,7 @@ h3 .repo-path {
 }
 
 .activity-count {
-  float: right;
+  margin-left: auto;
   padding: 1px 6px;
   border-radius: 8px;
   background: var(--accent-overlay);

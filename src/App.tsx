@@ -14,6 +14,7 @@ import { RemotesView } from "./components/RemotesView";
 import { RepoRow } from "./components/RepoRow";
 import { RunSummaryBar } from "./components/RunSummaryBar";
 import { SettingsDialog } from "./components/SettingsDialog";
+import { SidebarIcon } from "./components/SidebarIcon";
 import { InactiveView } from "./components/InactiveView";
 import { UnpushedView } from "./components/UnpushedView";
 import { WorkspaceBar } from "./components/WorkspaceBar";
@@ -286,6 +287,7 @@ function App() {
               aria-current={section === kind ? "page" : undefined}
               onClick={() => navigate(kind)}
             >
+              <SidebarIcon name={kind} />
               {label}
               {kind === "activity" && (runSummary?.running ?? 0) > 0 && (
                 <span className="activity-count"> {runSummary?.running}</span>
@@ -294,6 +296,7 @@ function App() {
           ))}
         </nav>
         <button disabled={!settings.view} onClick={() => setShowSettings(true)}>
+          <SidebarIcon name="settings" />
           Settings
         </button>
       </aside>

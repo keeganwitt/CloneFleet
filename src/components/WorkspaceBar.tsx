@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { uniqueLabels } from "../format";
 import type { RootView } from "../types";
+import { SidebarIcon } from "./SidebarIcon";
 
 type WorkspacePanel = "scope" | "recent" | "manage";
 
@@ -106,7 +107,8 @@ export function WorkspaceBar({
         title={directory || undefined}
         onClick={() => (panel ? closePanel() : setPanel("scope"))}
       >
-        <span>{scopeLabel}</span>
+        <SidebarIcon name="workspace" />
+        <span className="workspace-trigger-label">{scopeLabel}</span>
         <span className="workspace-chevron" aria-hidden="true" />
       </button>
       {panel && (
