@@ -394,10 +394,6 @@ input.days {
   border-radius: 999px;
 }
 
-.workspace-bar {
-  flex-wrap: wrap;
-}
-
 .spacer {
   flex: 1;
 }
@@ -959,6 +955,10 @@ h3 .repo-path {
   width: 29px;
   height: 29px;
   border-radius: 7px;
+}
+
+.workspace-bar > label {
+  display: block;
 }
 
 .workspace-label {
