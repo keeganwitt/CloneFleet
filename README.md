@@ -1,6 +1,6 @@
 # CloneFleet
 
-<img src="assets/clonefleet.svg" alt="CloneFleet: three ships with Git branch symbols sailing over cyan waves" width="320" />
+<img src="assets/clonefleet.svg" alt="CloneFleet: a ship in profile with a gold Git fork symbol above its deck" width="320" />
 
 Your fleet of Git clones, under one command. A cross-platform desktop app to keep your repositories in sync, clean up branches and worktrees, and tackle routine maintenance across your fleet at once.
 
