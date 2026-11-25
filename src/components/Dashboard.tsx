@@ -60,8 +60,40 @@ function Finding({ card, onOpen }: { card: Card; onOpen: Props["onOpenFinding"] 
   );
 }
 
+function SectionTitle({
+  title,
+  icon,
+  findings,
+  onShow,
+}: {
+  title: string;
+  icon: "attention" | "work" | "cleanup";
+  findings: Card[];
+  onShow: Props["onShow"];
+}) {
+  const paths = [...new Set(findings.flatMap((card) => card.paths))];
+  const count = `${paths.length} ${paths.length === 1 ? "repository" : "repositories"}`;
+  return (
+    <div className="dashboard-section-title">
+      <h2>
+        <Icon name={icon} />
+        {title}
+      </h2>
+      {paths.length > 0 && (
+        <button
+          className="link"
+          aria-label={`View all ${count} in ${title}`}
+          onClick={() => onShow(title, paths)}
+        >
+          ({count})
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function Dashboard(props: Props) {
-  const { cards, needsAttention, healthy } = buildOverview(
+  const { cards, healthy } = buildOverview(
     props.paths,
     props.states,
     props.healths,
@@ -81,7 +113,6 @@ export function Dashboard(props: Props) {
         ))}
       </ul>
     );
-  const attentionCount = `${needsAttention.length} ${needsAttention.length === 1 ? "repository" : "repositories"}`;
   const healthyLabel = `${healthy.length} ${healthy.length === 1 ? "repository" : "repositories"} clean and in sync at last fetch`;
 
   return (
@@ -121,21 +152,12 @@ export function Dashboard(props: Props) {
       </div>
       {(attention.length > 0 || updates.length > 0) && (
         <section className="dashboard-section dashboard-attention">
-          <div className="dashboard-section-title">
-            <h2>
-              <Icon name="attention" />
-              Needs attention
-            </h2>
-            {attention.length + updates.length > 1 && (
-              <button
-                className="link"
-                aria-label={`View all ${attentionCount} needing attention`}
-                onClick={() => props.onShow("Needs attention", needsAttention)}
-              >
-                ({attentionCount})
-              </button>
-            )}
-          </div>
+          <SectionTitle
+            title="Needs attention"
+            icon="attention"
+            findings={attention.length + updates.length > 1 ? [...attention, ...updates] : []}
+            onShow={props.onShow}
+          />
           <div className="finding-panel">
             {list("Needs attention", attention)}
             {list("Updates available", updates)}
@@ -145,19 +167,23 @@ export function Dashboard(props: Props) {
       <div className="dashboard-columns">
         {work.length > 0 && (
           <section className="dashboard-section dashboard-work">
-            <h2>
-              <Icon name="work" />
-              Work in progress
-            </h2>
+            <SectionTitle
+              title="Work in progress"
+              icon="work"
+              findings={work}
+              onShow={props.onShow}
+            />
             {list("Work in progress", work)}
           </section>
         )}
         {housekeeping.length > 0 && (
           <section className="dashboard-section">
-            <h2>
-              <Icon name="cleanup" />
-              Cleanup
-            </h2>
+            <SectionTitle
+              title="Cleanup"
+              icon="cleanup"
+              findings={housekeeping}
+              onShow={props.onShow}
+            />
             {list("Cleanup", housekeeping)}
           </section>
         )}

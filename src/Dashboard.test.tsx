@@ -129,7 +129,7 @@ describe("Dashboard", () => {
 
     expect(region).toHaveTextContent("5 repositories across 1 directory");
     const count = within(region).getByRole("button", {
-      name: "View all 4 repositories needing attention",
+      name: "View all 4 repositories in Needs attention",
     });
     expect(count).toHaveTextContent("(4 repositories)");
     const attention = within(region).getByRole("list", { name: "Needs attention" });
@@ -166,8 +166,34 @@ describe("Dashboard", () => {
 
     expect(within(region).getByText("2 repositories behind upstream")).toBeVisible();
     expect(
-      within(region).queryByRole("button", { name: "View all 2 repositories needing attention" }),
+      within(region).queryByRole("button", { name: "View all 2 repositories in Needs attention" }),
     ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { title: "Work in progress", names: ["web", "infra"] },
+    { title: "Cleanup", names: ["web", "lib", "docs"] },
+  ])("opens all unique repositories with $title findings", async ({ title, names }) => {
+    const user = userEvent.setup();
+    mockFleet({
+      summaries: { ...summaries, "/src/web": { ...summaries["/src/web"], trackedChanges: 1 } },
+      healths: { ...healths, "/src/web": { mergedBranches: 1 } },
+    });
+    render(<App />);
+    const region = await overview();
+    await user.click(
+      within(region).getByRole("button", {
+        name: `View all ${names.length} repositories in ${title}`,
+      }),
+    );
+
+    const table = within(screen.getByRole("table"));
+    expect(screen.getByRole("button", { name: "Clear repository filter" })).toBeVisible();
+    for (const path of repos) {
+      const name = path.split("/").at(-1)!;
+      if (names.includes(name)) expect(table.getByText(name)).toBeVisible();
+      else expect(table.queryByText(name)).not.toBeInTheDocument();
+    }
   });
 
   it("pulls every repository on the behind card and rechecks them", async () => {
