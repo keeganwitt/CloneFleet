@@ -934,6 +934,7 @@ h3 .repo-path {
 .sidebar {
   box-sizing: border-box;
   top: 0;
+  z-index: 2;
   align-self: start;
   gap: 10px;
   min-height: 100vh;
@@ -957,8 +958,9 @@ h3 .repo-path {
   border-radius: 7px;
 }
 
-.workspace-bar > label {
-  display: block;
+.workspace-dropdown {
+  position: relative;
+  min-width: 0;
 }
 
 .workspace-label {
@@ -969,9 +971,32 @@ h3 .repo-path {
   color: var(--muted);
 }
 
-.workspace-bar select {
+.workspace-dropdown > .workspace-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   width: 100%;
-  min-width: 0;
+  min-height: 33px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.workspace-trigger > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-chevron {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin: 0 2px 3px 0;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
 }
 
 .sidebar nav {
@@ -1099,8 +1124,7 @@ h3 .repo-path {
 
 .list-toolbar input:not([type="checkbox"]),
 .list-toolbar select,
-.list-toolbar button:not(.link),
-.workspace-bar select {
+.list-toolbar button:not(.link) {
   box-sizing: border-box;
   min-height: 33px;
   padding: 4px 8px;
@@ -1237,12 +1261,58 @@ select {
 .toolbar-menu-content > button:hover {
   background: var(--subtle);
 }
-.workspace-menu {
-  margin: 4px 0 0;
-}
-.workspace-menu .toolbar-menu-content {
+.workspace-panel {
+  box-sizing: border-box;
   left: 0;
   right: auto;
+  width: max(100%, 17rem);
+  max-width: calc(100vw - 32px);
+  max-height: min(26rem, 60vh);
+  overflow: auto;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.workspace-panel:focus {
+  outline: none;
+}
+
+.workspace-panel hr {
+  width: 100%;
+  margin: 4px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.workspace-scope-option {
+  display: grid;
+  grid-template-columns: 1em minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.workspace-scope-option[aria-pressed="true"],
+.workspace-scope-option[aria-pressed="true"]:hover {
+  background: var(--accent-overlay);
+  color: var(--accent-text);
+}
+
+.workspace-subpanel,
+.workspace-panel-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workspace-subpanel {
+  justify-content: space-between;
+}
+
+.workspace-panel-heading {
+  padding-bottom: 4px;
+}
+
+.workspace-panel-heading > button:hover {
+  background: var(--subtle);
 }
 .directory-type-help p {
   margin: 6px;

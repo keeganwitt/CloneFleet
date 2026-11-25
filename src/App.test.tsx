@@ -211,15 +211,22 @@ async function renderRepositories() {
   fireEvent.click(await screen.findByRole("button", { name: "Repositories" }));
 }
 
+function workspaceTrigger() {
+  return screen.getByRole("button", { name: /^Workspace \(/ });
+}
+
 function actionCalls(calls: ReturnType<typeof mockBackend>) {
   return calls.filter((c) => c.cmd === "run_action").map((c) => [c.args.path, c.args.action]);
 }
 
 describe("App", () => {
   it("shows an empty state when no repositories are configured", async () => {
+    const user = userEvent.setup();
     mockBackend({ repos: [] });
     render(<App />);
     expect(await screen.findByText(/No directories open/)).toBeInTheDocument();
+    await user.click(workspaceTrigger());
+    expect(screen.getByRole("button", { name: "Open directory…" })).toBeVisible();
   });
 
   it("lists repositories with their status", async () => {
@@ -511,7 +518,7 @@ describe("App", () => {
     await renderRepositories();
     await screen.findByText("alpha");
     const directories = within(screen.getByRole("group", { name: "Directories" }));
-    await user.click(directories.getByText("Manage directories"));
+    await user.click(workspaceTrigger());
     expect(directories.getByRole("button", { name: "Add directory…" })).toBeVisible();
     await user.click(directories.getByRole("button", { name: "Replace open directories…" }));
 
@@ -520,10 +527,15 @@ describe("App", () => {
     expect(screen.queryByText("alpha")).not.toBeInTheDocument();
     expect(calls.find((c) => c.cmd === "open_directories")?.args).toEqual({ paths: ["/picked"] });
 
-    await user.selectOptions(directories.getByLabelText("Open recent"), "src");
+    await user.click(workspaceTrigger());
+    await user.click(directories.getByRole("button", { name: "Open recent" }));
+    const recent = within(directories.getByRole("group", { name: "Open recent" }));
+    await user.click(recent.getByRole("button", { name: "src" }));
     expect(calls.find((c) => c.cmd === "open_recent")?.args).toEqual({ roots: ["/src"] });
 
-    await user.selectOptions(directories.getByLabelText("Open recent"), "Clear recent");
+    await user.click(workspaceTrigger());
+    await user.click(directories.getByRole("button", { name: "Open recent" }));
+    await user.click(screen.getByRole("button", { name: "Clear recent" }));
     await waitFor(() => expect(calls.some((c) => c.cmd === "clear_recent")).toBe(true));
   });
 
@@ -535,8 +547,11 @@ describe("App", () => {
     });
     await renderRepositories();
     const directories = await screen.findByRole("group", { name: "Directories" });
-    await user.click(within(directories).getByText("Manage directories"));
-    expect(directories).toHaveTextContent("2 repos");
+    await user.click(workspaceTrigger());
+    expect(within(directories).getByRole("button", { name: "a 2 repos" })).toBeVisible();
+    expect(within(directories).getByRole("button", { name: "b 1 repo" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Remove directory /a" })).not.toBeInTheDocument();
+    await user.click(within(directories).getByRole("button", { name: "Manage open directories" }));
 
     await user.click(screen.getByRole("button", { name: "Remove directory /a" }));
     await waitFor(() => expect(screen.queryByText("one")).not.toBeInTheDocument());
@@ -545,23 +560,35 @@ describe("App", () => {
   });
 
   it("tells apart open directories that share a name", async () => {
+    const user = userEvent.setup();
     mockBackend({
       repos: ["/home/projects/build-scripts/one", "/home/forks/build-scripts/two"],
       roots: ["/home/projects/build-scripts", "/home/forks/build-scripts"],
     });
     await renderRepositories();
-    const directories = await screen.findByRole("group", { name: "Directories" });
-    expect(directories).toHaveTextContent("projects/build-scripts");
-    expect(directories).toHaveTextContent("forks/build-scripts");
-    expect(screen.getByRole("option", { name: "projects/build-scripts" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "forks/build-scripts" })).toBeInTheDocument();
+    await user.click(workspaceTrigger());
+    expect(screen.getByRole("button", { name: "projects/build-scripts 1 repo" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "forks/build-scripts 1 repo" })).toBeVisible();
   });
 
   it("filters by directory when more than one is open", async () => {
     const user = userEvent.setup();
     mockBackend({ repos: ["/a/one", "/b/two"], roots: ["/a", "/b"] });
     await renderRepositories();
-    await user.selectOptions(await screen.findByLabelText("Filter by directory"), "/b");
+    const trigger = workspaceTrigger();
+    trigger.focus();
+    await user.keyboard("{Enter}");
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "All directories" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await user.keyboard("{Escape}");
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await user.click(trigger);
+    await user.click(screen.getByRole("button", { name: "b 1 repo" }));
+    expect(screen.getByRole("button", { name: "Workspace (b)" })).toHaveFocus();
     expect(screen.queryByText("one")).not.toBeInTheDocument();
     expect(screen.getByText("two")).toBeInTheDocument();
   });
@@ -576,7 +603,8 @@ describe("App", () => {
         .getAllByRole("button")
         .map((button) => button.textContent),
     ).toEqual(["Overview", "Repositories", "Cleanup", "Activity"]);
-    await user.selectOptions(screen.getByLabelText("Filter by directory"), "/b");
+    await user.click(workspaceTrigger());
+    await user.click(screen.getByRole("button", { name: "b 1 repo" }));
     await user.click(within(side).getByRole("button", { name: "Overview" }));
     expect(screen.getByRole("region", { name: "Overview" })).toHaveTextContent("1 repository in b");
     await user.click(within(side).getByRole("button", { name: "Repositories" }));
@@ -603,13 +631,13 @@ describe("App", () => {
     await user.click(await screen.findByLabelText("Select alpha"));
     await user.click(screen.getByText("More actions"));
     await user.click(screen.getByRole("button", { name: "Remove from list" }));
-    expect(await screen.findByText("Restore 1 hidden repository")).toBeInTheDocument();
-
-    await user.click(screen.getByText("Manage directories"));
+    await user.click(workspaceTrigger());
     await user.click(screen.getByRole("button", { name: "Rescan directories" }));
     await screen.findByText("No new repositories found");
     expect(screen.queryByText("alpha")).not.toBeInTheDocument();
 
+    await user.click(workspaceTrigger());
+    await user.click(screen.getByRole("button", { name: "Manage open directories" }));
     await user.click(screen.getByRole("button", { name: "Restore 1 hidden repository" }));
     expect(await screen.findByText("alpha")).toBeInTheDocument();
     expect(screen.queryByText(/removed repositor/)).not.toBeInTheDocument();

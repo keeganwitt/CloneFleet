@@ -1,5 +1,8 @@
+import { useEffect, useId, useRef, useState } from "react";
 import { uniqueLabels } from "../format";
 import type { RootView } from "../types";
+
+type WorkspacePanel = "scope" | "recent" | "manage";
 
 interface Props {
   roots: RootView[];
@@ -30,75 +33,184 @@ export function WorkspaceBar({
   onRescan,
   onRestoreExcluded,
 }: Props) {
+  const [panel, setPanel] = useState<WorkspacePanel>();
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const panelId = useId();
   const paths = roots.map((root) => root.path);
   const labels = uniqueLabels(paths);
   const recentLabels = uniqueLabels([...paths, ...recent.flat()]);
+  const selectedRoot = roots.find((root) => root.path === directory);
+  const scopeLabel = selectedRoot
+    ? `${labels.get(selectedRoot.path)}${selectedRoot.missing ? " (missing)" : ""}`
+    : "All directories";
+
+  useEffect(() => {
+    if (!panel) return;
+    const content = panelRef.current;
+    if (content) {
+      content.scrollTop = 0;
+      content.focus({ preventScroll: true });
+    }
+    const dismissOutside = (event: Event) => {
+      if (event.target instanceof Node && !workspaceRef.current?.contains(event.target))
+        setPanel(undefined);
+    };
+    document.addEventListener("pointerdown", dismissOutside);
+    document.addEventListener("focusin", dismissOutside);
+    return () => {
+      document.removeEventListener("pointerdown", dismissOutside);
+      document.removeEventListener("focusin", dismissOutside);
+    };
+  }, [panel]);
+
+  const closePanel = () => {
+    setPanel(undefined);
+    triggerRef.current?.focus();
+  };
+  const activate = (action: () => void) => {
+    closePanel();
+    action();
+  };
+  const chooseDirectory = (path: string) => {
+    closePanel();
+    if (path !== directory) onDirectory(path);
+  };
+  const panelLabel =
+    panel === "recent"
+      ? "Open recent"
+      : panel === "manage"
+        ? "Manage open directories"
+        : "Workspace";
+
   return (
-    <div className="workspace-bar" role="group" aria-label="Directories">
-      <label>
-        <span className="workspace-label">Workspace</span>
-        <select
-          value={directory}
-          aria-label="Filter by directory"
-          onChange={(event) => onDirectory(event.target.value)}
+    <div
+      className="workspace-dropdown"
+      ref={workspaceRef}
+      role="group"
+      aria-label="Directories"
+      onKeyDown={(event) => {
+        if (!panel || event.key !== "Escape") return;
+        event.stopPropagation();
+        closePanel();
+      }}
+    >
+      <span className="workspace-label">Workspace</span>
+      <button
+        ref={triggerRef}
+        className="workspace-trigger"
+        aria-label={`Workspace (${scopeLabel})`}
+        aria-expanded={panel !== undefined}
+        aria-controls={panel ? panelId : undefined}
+        title={directory || undefined}
+        onClick={() => (panel ? closePanel() : setPanel("scope"))}
+      >
+        <span>{scopeLabel}</span>
+        <span className="workspace-chevron" aria-hidden="true" />
+      </button>
+      {panel && (
+        <div
+          id={panelId}
+          ref={panelRef}
+          className="toolbar-menu-content workspace-panel"
+          tabIndex={-1}
+          role="group"
+          aria-label={panelLabel}
         >
-          <option value="">All directories</option>
-          {roots.map((root) => (
-            <option key={root.path} value={root.path}>
-              {labels.get(root.path)}
-              {root.missing ? " (missing)" : ""}
-            </option>
-          ))}
-        </select>
-      </label>
-      <details className="toolbar-menu workspace-menu">
-        <summary>Manage directories</summary>
-        <div className="toolbar-menu-content">
-          {roots.length > 0 && <button onClick={onAdd}>Add directory…</button>}
-          <button onClick={onOpen}>
-            {roots.length > 0 ? "Replace open directories…" : "Open directory…"}
-          </button>
-          {recent.length > 0 && (
-            <select
-              aria-label="Open recent"
-              value=""
-              onChange={(event) => {
-                const value = event.target.value;
-                if (!value) return;
-                if (value === "clear") onClearRecent();
-                else {
-                  const entry = recent[Number(value)];
-                  if (entry) onOpenRecent(entry);
-                }
-              }}
-            >
-              <option value="">Open recent…</option>
-              {recent.map((entry, index) => (
-                <option key={entry.join("\n")} value={index}>
-                  {entry.map((root) => recentLabels.get(root)).join(" + ")}
-                </option>
-              ))}
-              <option value="clear">Clear recent</option>
-            </select>
+          {panel !== "scope" && (
+            <div className="workspace-panel-heading">
+              <button aria-label="Back to workspace" onClick={() => setPanel("scope")}>
+                <span aria-hidden="true">←</span>
+              </button>
+              <strong>{panelLabel}</strong>
+            </div>
           )}
-          {roots.length > 0 && <button onClick={onRescan}>Rescan directories</button>}
-          {roots.map((root) => (
-            <button
-              key={root.path}
-              onClick={() => onRemoveDirectory(root.path)}
-              title={root.path}
-              aria-label={`Remove directory ${root.path}`}
-            >
-              Remove {labels.get(root.path)} <span className="muted">{root.repoCount} repos</span>
-            </button>
-          ))}
-          {roots.length > 0 && excludedCount > 0 && (
-            <button onClick={onRestoreExcluded}>
-              Restore {excludedCount} hidden {excludedCount === 1 ? "repository" : "repositories"}
-            </button>
+          {panel === "scope" && (
+            <>
+              <button
+                className="workspace-scope-option"
+                aria-pressed={!directory}
+                onClick={() => chooseDirectory("")}
+              >
+                <span aria-hidden="true">{!directory && "✓"}</span>
+                <span>All directories</span>
+              </button>
+              {roots.map((root) => (
+                <button
+                  key={root.path}
+                  className="workspace-scope-option"
+                  title={root.path}
+                  aria-pressed={directory === root.path}
+                  onClick={() => chooseDirectory(root.path)}
+                >
+                  <span aria-hidden="true">{directory === root.path && "✓"}</span>
+                  <span>
+                    {labels.get(root.path)}
+                    {root.missing ? " (missing)" : ""}
+                  </span>{" "}
+                  <span className="muted">
+                    {root.repoCount} {root.repoCount === 1 ? "repo" : "repos"}
+                  </span>
+                </button>
+              ))}
+              <hr />
+              {roots.length > 0 && <button onClick={() => activate(onAdd)}>Add directory…</button>}
+              <button onClick={() => activate(onOpen)}>
+                {roots.length > 0 ? "Replace open directories…" : "Open directory…"}
+              </button>
+              {recent.length > 0 && (
+                <button className="workspace-subpanel" onClick={() => setPanel("recent")}>
+                  Open recent <span aria-hidden="true">→</span>
+                </button>
+              )}
+              {roots.length > 0 && (
+                <>
+                  <button onClick={() => activate(onRescan)}>Rescan directories</button>
+                  <button className="workspace-subpanel" onClick={() => setPanel("manage")}>
+                    Manage open directories <span aria-hidden="true">→</span>
+                  </button>
+                </>
+              )}
+            </>
+          )}
+          {panel === "recent" && (
+            <>
+              {recent.map((entry) => (
+                <button
+                  key={entry.join("\n")}
+                  title={entry.join("\n")}
+                  onClick={() => activate(() => onOpenRecent(entry))}
+                >
+                  {entry.map((root) => recentLabels.get(root)).join(" + ")}
+                </button>
+              ))}
+              <hr />
+              <button onClick={() => activate(onClearRecent)}>Clear recent</button>
+            </>
+          )}
+          {panel === "manage" && (
+            <>
+              {roots.map((root) => (
+                <button
+                  key={root.path}
+                  title={root.path}
+                  aria-label={`Remove directory ${root.path}`}
+                  onClick={() => activate(() => onRemoveDirectory(root.path))}
+                >
+                  Remove {labels.get(root.path)}
+                </button>
+              ))}
+              {excludedCount > 0 && (
+                <button onClick={() => activate(onRestoreExcluded)}>
+                  Restore {excludedCount} hidden{" "}
+                  {excludedCount === 1 ? "repository" : "repositories"}
+                </button>
+              )}
+            </>
           )}
         </div>
-      </details>
+      )}
     </div>
   );
 }
