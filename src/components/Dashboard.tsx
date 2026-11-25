@@ -118,38 +118,38 @@ export function Dashboard(props: Props) {
   return (
     <section className="dashboard" aria-labelledby="overview-heading">
       <header className="page-heading dashboard-heading">
-        <div>
-          <h1 id="overview-heading">Overview</h1>
-          <p className="muted">{props.scopeSummary}</p>
-        </div>
-        <div className="toolbar">
-          <span className={stale ? "stale" : "muted"}>
-            {oldestFetchUnix !== null &&
-              `Oldest fetch ${formatRecent(props.nowUnix, oldestFetchUnix)}`}
-            {neverFetched > 0 &&
-              `${oldestFetchUnix !== null ? " · " : ""}${neverFetched} never fetched`}
-          </span>
-          <button
-            className="primary-button"
-            disabled={props.busy || props.paths.length === 0}
-            onClick={props.onFetchAll}
-          >
-            Fetch all {props.paths.length}
-          </button>
+        <h1 id="overview-heading">Overview</h1>
+        <p className="muted">{props.scopeSummary}</p>
+        <div className="overview-operations" role="group" aria-label="Workspace operations">
+          <div className="overview-operation">
+            <button
+              className="primary-button"
+              disabled={props.busy || props.paths.length === 0}
+              onClick={props.onFetchAll}
+            >
+              Fetch all {props.paths.length}
+            </button>
+            <span className={stale ? "stale" : "muted"}>
+              {oldestFetchUnix !== null &&
+                `Oldest fetch ${formatRecent(props.nowUnix, oldestFetchUnix)}`}
+              {neverFetched > 0 &&
+                `${oldestFetchUnix !== null ? " · " : ""}${neverFetched} never fetched`}
+            </span>
+          </div>
+          <div className="overview-operation">
+            <button className="link" disabled={props.pendingScans > 0} onClick={props.onRescan}>
+              Refresh local status
+            </button>
+            <span className="muted" role="status" aria-label="Scan status">
+              {props.pendingScans > 0
+                ? `Checking branches… ${props.pendingScans} left`
+                : props.lastScannedUnix !== undefined
+                  ? `Checked ${formatRecent(props.nowUnix, props.lastScannedUnix)}`
+                  : ""}
+            </span>
+          </div>
         </div>
       </header>
-      <div className="toolbar overview-refresh">
-        <span className="muted" role="status" aria-label="Scan status">
-          {props.pendingScans > 0
-            ? `Checking branches… ${props.pendingScans} left`
-            : props.lastScannedUnix !== undefined
-              ? `Checked ${formatRecent(props.nowUnix, props.lastScannedUnix)}`
-              : ""}
-        </span>
-        <button className="link" disabled={props.pendingScans > 0} onClick={props.onRescan}>
-          Refresh local status
-        </button>
-      </div>
       {(attention.length > 0 || updates.length > 0) && (
         <section className="dashboard-section dashboard-attention">
           <SectionTitle

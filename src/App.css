@@ -1349,22 +1349,34 @@ select {
 }
 
 .dashboard-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 8px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
 }
 
-.dashboard-heading .toolbar,
-.overview-refresh {
-  margin-bottom: 0;
+.overview-operations,
+.overview-operation {
+  display: flex;
+  align-items: center;
   flex-wrap: wrap;
 }
-.overview-refresh {
-  justify-content: flex-end;
-  font-size: 12px;
+
+.overview-operations {
+  gap: 10px 24px;
+  margin-top: 16px;
+}
+
+.overview-operation {
+  gap: 6px 8px;
+  min-width: 0;
+}
+
+.overview-operation > span {
+  font-size: 13px;
+}
+
+.overview-operation > .link {
+  padding-inline: 0;
 }
 .dashboard-section {
   margin-bottom: 22px;
