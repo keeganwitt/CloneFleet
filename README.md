@@ -1,16 +1,16 @@
 # CloneFleet
 
-<img src="assets/clonefleet.svg" alt="CloneFleet: three ships with Git branch symbols sailing over cyan waves" width="320" />
+<img src="assets/clonefleet.svg" alt="CloneFleet: a ship in profile with a gold Git fork symbol above its deck" width="320" />
 
 Your fleet of Git clones, under one command. A cross-platform desktop app to keep your repositories in sync, clean up branches and worktrees, and tackle routine maintenance across your fleet at once.
 
-![The CloneFleet overview: repositories grouped by what needs attention, each group with a one-click fix](docs/screenshots/overview.png)
+![The CloneFleet overview: repositories grouped by what needs attention, each group with a link to its review](docs/screenshots/overview.png)
 
 ## Features
 
-- **Overview dashboard** as the home screen: repositories grouped by what needs doing (stopped mid-operation, diverged, unpushed commits, behind upstream, not on the default branch, uncommitted changes, stashes, merged or stale branches, removable worktrees), each with a one-click fix or a link to the filtered repository list. A background check of branches and unpushed work runs when directories load and after actions; fetching stays manual.
-- **Open directories of repositories**, like a code editor's workspace. **Open** replaces the current set (and remembers it under **Recent**), **Add** appends another directory, and each directory can be removed or rescanned. Directories are scanned up to four levels deep; linked worktrees, submodules, hidden directories, and common build/dependency directories are skipped. Individual repositories can be removed from the list and stay hidden across rescans until restored.
-- **Search and filter** the repository list by name, path, or branch, by working tree state, and by upstream sync state.
+- **Overview dashboard** as the home screen: repositories grouped by what needs doing (stopped mid-operation, diverged, unpushed commits, behind upstream, not on the default branch, uncommitted changes, stashes, merged or stale branches, removable worktrees), with links to filtered repository and cleanup views. A background check of branches and unpushed work runs when directories load and after actions; fetching stays manual.
+- **Open directories of repositories**, like a code editor's workspace. Use the **Workspace** dropdown to show all repositories or focus on one directory. **Add directory** adds to the current workspace, and **Replace open directories** opens a new workspace and remembers the old set under **Open recent**. Use **Rescan directories** to find new repositories and **Manage open directories** to close directories or restore hidden repositories. **Close all directories** leaves the workspace empty and keeps the previous set under **Open recent** when recent history is enabled. Directories are scanned up to four levels deep; linked worktrees, submodules, hidden directories, and common build/dependency directories are skipped.
+- **Repositories** brings together the repository table, local work, and remotes. Search and filter the table, then select repositories to see their actions in the same toolbar.
 - **Checkout the default branch.** Repositories with uncommitted changes to tracked files are skipped and reported, with per-repository options to stash (never unstashed automatically) or commit those changes.
 - **Repository details panel** with tabs for **Changes** (changed files with per-file diffs), **Branches** (each branch's commits not on the base and its diff since it branched), and **Main branches** (per-repository primary branch plus extra protected main branches such as `dev` or `2.x`, which also count as merge targets).
 - **Bulk run summary** after every bulk action, with counts per outcome that filter the table, and a fetch-freshness indicator per repository.
@@ -26,26 +26,31 @@ Your fleet of Git clones, under one command. A cross-platform desktop app to kee
 - **Rebase forks** onto `upstream/<default>`:
   - Only runs on a clean default branch, and aborts on conflicts so nothing changes.
   - Afterwards it offers to push to `origin`. Force pushes are confirmed and use `--force-with-lease` pinned to the commit seen during the rebase.
+- **Cleanup** combines **Branches & worktrees**, **Disk space**, and **Inactive clones**. Each view previews the exact selection before applying changes.
 - **Branch cleanup:**
   - Finds merged branches using three kinds of evidence: ancestry (merge commits and fast-forwards), patch equivalence (rebase merges), and squash detection.
   - Flags branches whose remote branch was deleted, and branches with no commits newer than a configurable threshold.
-  - Shows branches as a tree grouped by `/`, with folder-level selection.
+  - Shows candidates in a table, with an optional tree grouped by repository and branch prefix for folder-level selection.
   - Compares against `upstream/<default>` when an `upstream` remote exists, so fork branches merged upstream are recognized.
 - **Unpushed work and stashes**: per repository, lists branches with commits that exist on no remote (noting ones whose changes were already merged), uncommitted changes in any worktree, and stashes, which can be dropped after confirmation.
-- **Build and dependency cleanup** frees disk space by deleting regenerable directories inside repositories and their linked worktrees: build output (Maven and Cargo `target`, `dist`, `.next`, `__pycache__`, .NET `bin`/`obj`, and similar), directories that need reinstalling (`node_modules`, Gradle `build` and `.gradle`, `.tox`, `.terraform`, `vendor`), and Python virtualenvs. Each kind is recognized by its name and its project file (for example `target` next to `pom.xml`). Sizes leave out hard-linked files, such as pnpm's, because deleting them frees nothing. Only build output is shown at first, and directories unchanged for a configurable number of days are preselected; the other two categories can be shown and are never preselected. Directories are deleted permanently by default, or can be moved to the Trash instead.
-- **Worktree cleanup** works like branch cleanup: clean worktrees whose branch is merged are preselected (optionally deleting the branch), worktrees whose directory is gone are pruned, and stale or active unmerged worktrees can be removed while keeping their branch, so no commits are lost.
+- **Build and dependency cleanup** frees disk space by deleting regenerable directories inside repositories and their linked worktrees: build output (Maven and Cargo `target`, `dist`, `.next`, `__pycache__`, .NET `bin`/`obj`, and similar), directories that need reinstalling (`node_modules`, Gradle `build` and `.gradle`, `.tox`, `.terraform`, `vendor`), and Python virtualenvs. Each kind is recognized by its name and its project file (for example `target` next to `pom.xml`). Sizes leave out hard-linked files, such as pnpm's, because deleting them frees nothing. Filter candidates by type, then select the directories to review. The review defaults to moving them to the Trash, with an explicit option to delete permanently.
+- **Worktree cleanup** works like branch cleanup: select linked worktrees to remove while keeping their branches. Removing a missing worktree clears its Git record.
 - **Inactive clones** finds clones you may no longer need, by the date of your last commit (matching each repository's `user.email`, `.mailmap` aliases, and extra identities from Settings) and of your last local activity (the newest HEAD reflog entry in any worktree, not counting CloneFleet's own pulls and switches). Either filter can be turned off, and clones you've never committed to show **Never**. Each clone lists what would be lost with it (unpushed branches and detached HEAD commits, stashes, uncommitted changes, ignored files that aren't build output, linked worktrees outside it), and selected clones can be moved to the Trash.
 
 ## Screenshots
 
-|                                                                                                                                 |                                                                                                                                       |
-| ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| ![Repositories list with three selected and the action bar pinned to the bottom](docs/screenshots/repositories.png)             | ![Branch and worktree cleanup with merged, squash-merged, remote-deleted, and stale branches in a tree](docs/screenshots/cleanup.png) |
-| **Repositories**: filter, sort, select, and run an action on many repositories at once.                                         | **Branch & worktree cleanup**: merged branches are found even after squash and rebase merges.                                         |
-| ![A branch's commits and diff in the repository details panel](docs/screenshots/branch-diff.png)                                | ![Remotes page with each remote checked and a bulk URL editor](docs/screenshots/remotes.png)                                          |
-| **Branch details**: see what an unmerged branch contains before deleting it.                                                    | **Remotes**: check every remote, fix moved ones, and rewrite URLs in bulk.                                                            |
-| ![Disk cleanup listing dist, node_modules, a virtualenv, and .terraform with sizes and ages](docs/screenshots/disk-cleanup.png) | ![Disk cleanup after deleting dist, reporting the space freed](docs/screenshots/disk-cleanup-deleted.png)                             |
-| **Disk cleanup**: find build output, dependencies, and virtualenvs that git ignores, with their sizes.                          | **After deleting**: each result says what was removed and how much space it freed.                                                    |
+|                                                                                                |                                                                                                           |
+| ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| ![Repositories before selecting a row](docs/screenshots/repositories-before.png)               | ![Three selected repositories with their actions in the table toolbar](docs/screenshots/repositories.png) |
+| **Repositories** gives you search, filters, and a scoped fetch.                                | **Selection** adds actions to the same toolbar.                                                           |
+| ![Branches and worktrees with three cleanup candidates selected](docs/screenshots/cleanup.png) | ![Cleanup review of two local branches and one linked worktree](docs/screenshots/cleanup-review.png)      |
+| **Branches & worktrees** shows why each item is a candidate.                                   | **Review** lists the exact targets and flags unmerged work.                                               |
+| ![Disk space showing directories and their sizes](docs/screenshots/disk-cleanup.png)           | ![Inactive clones with local work highlighted](docs/screenshots/inactive-clones.png)                      |
+| **Disk space** shows build output, dependencies, and virtual environments.                     | **Inactive clones** shows last activity and local data.                                                   |
+| ![Branch commits and changes in the detail panel](docs/screenshots/branch-diff.png)            | ![Remote health results in the Repositories view](docs/screenshots/remotes.png)                           |
+| **Branch details** shows the commits and changes before cleanup.                               | **Remotes** checks URLs and can preview bulk edits.                                                       |
+
+See the [Disk space review](docs/screenshots/disk-cleanup-review.png) and the [Inactive clones review](docs/screenshots/inactive-review.png) for their removal options and warnings.
 
 The screenshots use the made-up repositories from `pnpm demo`; see [docs/demo.md](docs/demo.md).
 
@@ -58,7 +63,7 @@ The screenshots use the made-up repositories from `pnpm demo`; see [docs/demo.md
 - The default branch, the checked-out branch, and branches checked out in other worktrees are never deleted.
 - Only local branches are deleted. Deletion is re-verified at the time it runs, and deleting an unmerged branch requires explicit confirmation. Deleted branch SHAs are reported so they can be recreated.
 - Worktrees with uncommitted or untracked files, locked worktrees, and the main worktree are never removed.
-- Build and dependency directories are deleted only when they match a known kind, git ignores everything inside them, nothing in them is tracked, and they contain no git repository. This is re-checked when deletion runs, symlinks are never followed, and deletion is permanent unless **Move to Trash instead of deleting** is checked (moved directories free their space only when the Trash is emptied). Every deletion is recorded in the activity log.
+- Build and dependency directories are deleted only when they match a known kind, git ignores everything inside them, nothing in them is tracked, and they contain no git repository. This is re-checked when deletion runs, symlinks are never followed, and the review defaults to **Move to Trash** (empty the Trash to free their space). Permanent deletion requires choosing **Delete permanently**. Every deletion is recorded in the activity log.
 - Clones are moved to the Trash, never deleted, and only from the top of a main clone. The confirmation lists everything that would be lost, and the move is skipped if the reviewed risk summary or snapshot of refs, stashes, index state, and relevant file contents has changed.
 
 ## Requirements

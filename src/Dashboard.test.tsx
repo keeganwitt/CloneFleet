@@ -43,7 +43,7 @@ const healths: Record<string, Partial<RepoHealth>> = {
   "/src/docs": { mergedBranches: 1, unpushedBranches: 1 },
 };
 
-function mockFleet() {
+function mockFleet({ summaries: repoSummaries = summaries, healths: repoHealth = healths } = {}) {
   const calls: { cmd: string; args: Record<string, unknown> }[] = [];
   mockIPC((cmd, payload) => {
     const args = (payload ?? {}) as Record<string, unknown>;
@@ -75,9 +75,9 @@ function mockFleet() {
           recent: [],
         };
       case "repo_summary":
-        return { ...clean, ...summaries[path] };
+        return { ...clean, ...repoSummaries[path] };
       case "repo_health":
-        return { ...noHealth, ...healths[path] };
+        return { ...noHealth, ...repoHealth[path] };
       case "scan_artifacts":
         return {
           artifacts:
@@ -122,31 +122,78 @@ async function overview() {
 
 describe("Dashboard", () => {
   it("lands on the overview with problem cards grouped by section", async () => {
+    const user = userEvent.setup();
     mockFleet();
     render(<App />);
     const region = await overview();
 
-    expect(region).toHaveTextContent("5 repositories · 4 need attention");
+    expect(region).toHaveTextContent("5 repositories across 1 directory");
+    const count = within(region).getByRole("button", {
+      name: "View all 4 repositories in Needs attention",
+    });
+    expect(count).toHaveTextContent("(4 repositories)");
     const attention = within(region).getByRole("list", { name: "Needs attention" });
     expect(
       within(attention).getByLabelText("1 repository stopped mid-operation"),
-    ).toHaveTextContent("infra");
+    ).toHaveTextContent("Git operation in progress");
     expect(
       within(attention).getByLabelText("1 branch with unpushed commits in 1 repository"),
-    ).toHaveTextContent("docs");
+    ).toHaveTextContent("Unpushed commits");
     const updates = within(region).getByRole("list", { name: "Updates available" });
     expect(within(updates).getByLabelText("2 repositories behind upstream")).toHaveTextContent(
-      "api, web",
+      "Behind upstream",
     );
-    const housekeeping = within(region).getByRole("list", { name: "Housekeeping" });
+    const housekeeping = within(region).getByRole("list", { name: "Cleanup" });
     expect(
       within(housekeeping).getByLabelText("3 branches merged in 2 repositories"),
     ).toBeInTheDocument();
+    expect(within(region).getByText(/clean and in sync at last fetch/)).toBeInTheDocument();
+
+    await user.click(count);
+    expect(screen.getByRole("table")).toBeVisible();
+    for (const name of ["api", "web", "infra", "docs"])
+      expect(screen.getByText(name)).toBeVisible();
+    expect(screen.queryByText("lib")).not.toBeInTheDocument();
+  });
+
+  it("shows the behind count only on the finding when it is the sole attention finding", async () => {
+    mockFleet({
+      summaries: { "/src/api": { behind: 3 }, "/src/web": { behind: 1 } },
+      healths: {},
+    });
+    render(<App />);
+    const region = await overview();
+
+    expect(within(region).getByText("2 repositories behind upstream")).toBeVisible();
     expect(
-      within(within(region).getByRole("list", { name: "Up to date" })).getByLabelText(
-        "1 up to date and clean",
-      ),
-    ).toHaveTextContent("1 repository is up to date and cleanlib");
+      within(region).queryByRole("button", { name: "View all 2 repositories in Needs attention" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { title: "Work in progress", names: ["web", "infra"] },
+    { title: "Cleanup", names: ["web", "lib", "docs"] },
+  ])("opens all unique repositories with $title findings", async ({ title, names }) => {
+    const user = userEvent.setup();
+    mockFleet({
+      summaries: { ...summaries, "/src/web": { ...summaries["/src/web"], trackedChanges: 1 } },
+      healths: { ...healths, "/src/web": { mergedBranches: 1 } },
+    });
+    render(<App />);
+    const region = await overview();
+    await user.click(
+      within(region).getByRole("button", {
+        name: `View all ${names.length} repositories in ${title}`,
+      }),
+    );
+
+    const table = within(screen.getByRole("table"));
+    expect(screen.getByRole("button", { name: "Clear repository filter" })).toBeVisible();
+    for (const path of repos) {
+      const name = path.split("/").at(-1)!;
+      if (names.includes(name)) expect(table.getByText(name)).toBeVisible();
+      else expect(table.queryByText(name)).not.toBeInTheDocument();
+    }
   });
 
   it("pulls every repository on the behind card and rechecks them", async () => {
@@ -155,7 +202,14 @@ describe("Dashboard", () => {
     render(<App />);
     const region = await overview();
     const card = within(region).getByLabelText("2 repositories behind upstream");
-    await user.click(within(card).getByRole("button", { name: "Pull all" }));
+    await user.click(within(card).getByRole("button", { name: "View behind repositories" }));
+    await user.click(screen.getByLabelText("Select all matching repositories"));
+    await user.click(screen.getByRole("button", { name: "Pull…" }));
+    const review = screen.getByRole("dialog", { name: "Review pull" });
+    expect(review).toHaveTextContent("/src/api");
+    expect(review).toHaveTextContent("/src/web");
+    expect(calls.filter((call) => call.cmd === "run_action")).toHaveLength(0);
+    await user.click(within(review).getByRole("button", { name: "Pull 2 repositories" }));
 
     await waitFor(() =>
       expect(calls.filter((c) => c.cmd === "run_action").map((c) => c.args)).toEqual([
@@ -179,9 +233,9 @@ describe("Dashboard", () => {
     render(<App />);
     const region = await overview();
     const card = within(region).getByLabelText("2 repositories behind upstream");
-    await user.click(within(card).getByRole("button", { name: "Show" }));
+    await user.click(within(card).getByRole("button", { name: "View behind repositories" }));
 
-    expect(screen.getByText("Showing: 2 repositories behind upstream")).toBeInTheDocument();
+    expect(screen.getByText("2 repositories behind upstream")).toBeInTheDocument();
     expect(screen.getByText("api")).toBeInTheDocument();
     expect(screen.getByText("web")).toBeInTheDocument();
     expect(screen.queryByText("lib")).not.toBeInTheDocument();
@@ -190,7 +244,7 @@ describe("Dashboard", () => {
       "page",
     );
 
-    await user.click(screen.getByRole("button", { name: "Show all repositories" }));
+    await user.click(screen.getByRole("button", { name: "Clear repository filter" }));
     expect(screen.getByText("lib")).toBeInTheDocument();
   });
 
@@ -200,9 +254,11 @@ describe("Dashboard", () => {
     render(<App />);
     const region = await overview();
     const card = within(region).getByLabelText("3 branches merged in 2 repositories");
-    await user.click(within(card).getByRole("button", { name: "Clean up" }));
+    await user.click(within(card).getByRole("button", { name: "Review merged branches" }));
 
-    expect(await screen.findByText("Branch & worktree cleanup")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("region", { name: "Branches and worktrees" }),
+    ).toBeInTheDocument();
     await waitFor(() =>
       expect(calls.filter((c) => c.cmd === "analyze_branches").map((c) => c.args.path)).toEqual([
         "/src/lib",
@@ -219,10 +275,10 @@ describe("Dashboard", () => {
     const card = await within(region).findByLabelText(
       "3.0 MB of build and dependency directories in 1 repository",
     );
-    await user.click(within(card).getByRole("button", { name: "Clean up" }));
+    await user.click(within(card).getByRole("button", { name: "Review disk space" }));
 
-    expect(await screen.findByText("Build & dependency cleanup")).toBeInTheDocument();
-    await user.click(screen.getByRole("checkbox", { name: "Needs reinstalling" }));
+    expect(await screen.findByRole("region", { name: "Disk space" })).toBeInTheDocument();
+
     expect(
       screen.getByRole("checkbox", { name: "Select /src/web/node_modules" }),
     ).not.toBeChecked();

@@ -1,5 +1,5 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { ArtifactScan } from "../useArtifactScan";
@@ -80,122 +80,76 @@ function renderView() {
 const checkbox = (path: string) => screen.getByRole("checkbox", { name: `Select ${path}` });
 
 describe("ArtifactsView", () => {
-  it("shows only build output by default, preselecting directories unchanged for a while", () => {
+  it("shows all directory types without selecting a target automatically", () => {
     mockBackend();
     renderView();
-
-    expect(checkbox("/repo/target")).toBeChecked();
-    expect(checkbox("/wt/feature/target")).toBeChecked();
-    expect(checkbox("/repo/web/.next")).not.toBeChecked();
-    expect(screen.queryByText("web/node_modules")).not.toBeInTheDocument();
-    expect(screen.queryByText(".venv")).not.toBeInTheDocument();
-    expect(screen.getByText("feature: target")).toBeInTheDocument();
-    expect(screen.getByText(/1 repository has nothing to clean up/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Delete 2 directories (4.0 MB)" })).toBeEnabled();
-  });
-
-  it("explains each category next to its toggle", () => {
-    mockBackend();
-    renderView();
-
-    expect(
-      screen.getByRole("checkbox", { name: "Needs reinstalling" }),
-    ).toHaveAccessibleDescription(/Run the install step again before building/);
-    expect(
-      screen.getByRole("checkbox", { name: "May not be reproducible" }),
-    ).toHaveAccessibleDescription(/Python virtualenvs/);
-  });
-
-  it("lists the other tiers unselected when their toggles are turned on", async () => {
-    mockBackend();
-    renderView();
-
-    await userEvent.click(screen.getByRole("checkbox", { name: "Needs reinstalling" }));
+    expect(checkbox("/repo/target")).not.toBeChecked();
+    expect(checkbox("/wt/feature/target")).not.toBeChecked();
     expect(checkbox("/repo/web/node_modules")).not.toBeChecked();
-    expect(screen.getByText(/5\.0 kB shared/)).toBeInTheDocument();
-    expect(screen.queryByText(".venv")).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("checkbox", { name: "May not be reproducible" }));
     expect(checkbox("/repo/.venv")).not.toBeChecked();
+    expect(screen.getByText("Worktree · feature")).toBeInTheDocument();
+    expect(screen.getByText("5.0 kB shared")).toBeInTheDocument();
   });
 
-  it("confirms with the reinstall warning and deletes with the shown tiers", async () => {
+  it("shows exact paths and warnings, then moves approved directories to Trash by default", async () => {
+    const user = userEvent.setup();
     const calls = mockBackend();
     const onRescan = renderView();
-
-    await userEvent.click(screen.getByRole("checkbox", { name: "Needs reinstalling" }));
-    await userEvent.click(checkbox("/repo/web/node_modules"));
-    await userEvent.click(checkbox("/wt/feature/target"));
-    await userEvent.click(screen.getByRole("button", { name: /^Delete 2 directories/ }));
-
+    await user.click(checkbox("/repo/web/node_modules"));
+    await user.click(checkbox("/repo/.venv"));
+    await user.click(screen.getByRole("button", { name: "Review 2 directories…" }));
+    const dialog = screen.getByRole("dialog", { name: "Review disk cleanup" });
+    expect(within(dialog).getByRole("radio", { name: "Move to Trash" })).toBeChecked();
+    expect(dialog).toHaveTextContent("/repo/web/node_modules");
+    expect(dialog).toHaveTextContent("/repo/.venv");
+    expect(dialog).toHaveTextContent("Needs reinstalling");
+    expect(dialog).toHaveTextContent("May not be reproducible");
+    expect(called(calls, "delete_artifacts")).toEqual([]);
+    await user.click(within(dialog).getByRole("button", { name: "Move 2 directories to Trash" }));
     await waitFor(() => expect(onRescan).toHaveBeenCalledWith(["/repo"]));
-    const [dialog] = called(calls, "plugin:dialog|message");
-    expect(dialog.message).toContain("Permanently delete 2 directories (4.0 MB) in 1 repository");
-    expect(dialog.message).toContain("1 of them will need reinstalling");
-    expect(dialog.message).not.toContain("may not be reproducible");
     expect(called(calls, "delete_artifacts")).toEqual([
       {
         path: "/repo",
-        artifacts: ["/repo/target", "/repo/web/node_modules"],
-        tiers: ["buildOutput", "reinstall"],
+        artifacts: ["/repo/web/node_modules", "/repo/.venv"],
+        tiers: ["reinstall", "unreproducible"],
+        removal: "trash",
+      },
+    ]);
+  });
+
+  it("requires selecting permanent deletion and excludes rows hidden by type and search", async () => {
+    const user = userEvent.setup();
+    const calls = mockBackend();
+    renderView();
+    await user.click(screen.getByLabelText("Select all matching directories"));
+    await user.selectOptions(screen.getByLabelText("Directory type"), "buildOutput");
+    await user.type(screen.getByLabelText("Search cleanup directories"), "/wt/");
+    await user.click(screen.getByRole("button", { name: "Review 1 directory…" }));
+    const dialog = screen.getByRole("dialog", { name: "Review disk cleanup" });
+    expect(dialog).toHaveTextContent("/wt/feature/target");
+    expect(dialog).not.toHaveTextContent("node_modules");
+    await user.click(within(dialog).getByRole("radio", { name: "Delete permanently" }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Delete 1 directory permanently" }),
+    );
+    expect(called(calls, "delete_artifacts")).toEqual([
+      {
+        path: "/repo",
+        artifacts: ["/wt/feature/target"],
+        tiers: ["buildOutput"],
         removal: "delete",
       },
     ]);
-    expect(screen.getByText("Deleted /repo/target")).toBeInTheDocument();
   });
 
-  it("moves directories to the Trash when asked", async () => {
-    const calls = mockBackend();
-    const onRescan = renderView();
-
-    await userEvent.click(
-      screen.getByRole("checkbox", { name: "Move to Trash instead of deleting" }),
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Move 2 directories to the Trash (4.0 MB)" }),
-    );
-
-    await waitFor(() => expect(onRescan).toHaveBeenCalled());
-    const [dialog] = called(calls, "plugin:dialog|message");
-    expect(dialog.message).toContain("Move 2 directories (4.0 MB) in 1 repository to the Trash?");
-    expect(dialog.message).toContain("freed when the Trash is emptied");
-    expect(called(calls, "delete_artifacts")[0]).toMatchObject({ removal: "trash" });
-  });
-
-  it("words the warnings for a single directory", async () => {
+  it("allows returning to selection before applying", async () => {
+    const user = userEvent.setup();
     const calls = mockBackend();
     renderView();
-
-    await userEvent.click(screen.getByRole("checkbox", { name: "Needs reinstalling" }));
-    await userEvent.click(checkbox("/repo/target"));
-    await userEvent.click(checkbox("/wt/feature/target"));
-    await userEvent.click(checkbox("/repo/web/node_modules"));
-    await userEvent.click(screen.getByRole("button", { name: /^Delete 1 directory/ }));
-
-    await waitFor(() => expect(called(calls, "plugin:dialog|message")).toHaveLength(1));
-    expect(called(calls, "plugin:dialog|message")[0].message).toContain(
-      "It will need reinstalling",
-    );
-  });
-
-  it("deletes nothing when the confirmation is cancelled", async () => {
-    const calls = mockBackend({ confirmed: false });
-    const onRescan = renderView();
-
-    await userEvent.click(screen.getByRole("button", { name: /^Delete 2 directories/ }));
-    await waitFor(() => expect(called(calls, "plugin:dialog|message")).toHaveLength(1));
+    await user.click(checkbox("/repo/target"));
+    await user.click(screen.getByRole("button", { name: "Review 1 directory…" }));
+    await user.click(screen.getByRole("button", { name: "Back to selection" }));
+    expect(checkbox("/repo/target")).toBeChecked();
     expect(called(calls, "delete_artifacts")).toEqual([]);
-    expect(onRescan).not.toHaveBeenCalled();
-  });
-
-  it("selects every shown directory in a repository from its header", async () => {
-    mockBackend();
-    renderView();
-
-    await userEvent.click(
-      screen.getByRole("checkbox", { name: "Select all shown directories in repo" }),
-    );
-    expect(checkbox("/repo/web/.next")).toBeChecked();
-    expect(screen.getByRole("button", { name: "Delete 3 directories (6.0 MB)" })).toBeEnabled();
   });
 });

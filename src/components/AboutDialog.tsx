@@ -10,7 +10,13 @@ type Check =
   | { status: "available"; release: LatestRelease }
   | { status: "error"; message: string };
 
-export function AboutDialog({ onClose }: { onClose: () => void }) {
+export function AboutDialog({
+  onClose,
+  closeLabel = "Close",
+}: {
+  onClose: () => void;
+  closeLabel?: string;
+}) {
   const [version, setVersion] = useState<string>();
   const [check, setCheck] = useState<Check>({ status: "idle" });
 
@@ -69,7 +75,7 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
         </div>
         <div className="toolbar">
           <span className="spacer" />
-          <button onClick={onClose}>Close</button>
+          <button onClick={onClose}>{closeLabel}</button>
         </div>
       </div>
     </div>

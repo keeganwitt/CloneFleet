@@ -1,20 +1,10 @@
 import { formatRecent } from "../cleanup";
-import { basename, uniqueLabels } from "../format";
 import type { Freshness } from "../freshness";
 import { isStale } from "../freshness";
-import { PROBLEMS, SECTIONS, buildOverview, type Card, type Fix } from "../problems";
+import { PROBLEMS, buildOverview, type Card, type ProblemKind } from "../problems";
 import type { RepoState } from "../state";
 import type { RepoHealth } from "../types";
-
-const FIX_LABELS: Record<Fix, string> = {
-  pull: "Pull all",
-  checkoutDefault: "Check out default",
-  reviewUnpushed: "Review",
-  cleanup: "Clean up",
-  cleanArtifacts: "Clean up",
-};
-
-const PREVIEW_COUNT = 4;
+import { Icon } from "./Icon";
 
 interface Props {
   paths: string[];
@@ -25,142 +15,186 @@ interface Props {
   lastScannedUnix: number | undefined;
   nowUnix: number;
   freshness: Freshness;
+  scopeSummary: string;
   busy: boolean;
-  onFix: (fix: Fix, paths: string[]) => void;
+  onOpenFinding: (kind: ProblemKind, label: string, paths: string[]) => void;
   onShow: (label: string, paths: string[]) => void;
   onFetchAll: () => void;
   onRescan: () => void;
 }
 
-function RepoNames({ paths, labels }: { paths: string[]; labels: Map<string, string> }) {
-  const shown = paths.slice(0, PREVIEW_COUNT).map((path) => labels.get(path) ?? basename(path));
-  const more = paths.length - shown.length;
-  return (
-    <span className="muted card-repos">
-      {shown.join(", ")}
-      {more > 0 && ` and ${more} more`}
-    </span>
-  );
-}
+const FINDING_LABELS: Record<ProblemKind, [string, string]> = {
+  authRequired: ["Authentication needed", "View repositories"],
+  remoteUnreachable: ["Remote unavailable", "View repositories"],
+  statusError: ["Repository unavailable", "View repositories"],
+  inProgress: ["Git operation in progress", "View repositories"],
+  conflicts: ["Conflicts", "View repositories"],
+  diverged: ["Diverged from upstream", "View repositories"],
+  unpushed: ["Unpushed commits", "Review unpushed work"],
+  behind: ["Behind upstream", "View behind repositories"],
+  notOnDefault: ["On a non-default branch", "View repositories"],
+  uncommitted: ["Working tree changes", "View repositories"],
+  stashes: ["Stashes", "Review stashes"],
+  mergedBranches: ["Merged branches", "Review merged branches"],
+  staleBranches: ["Stale or upstream-deleted branches", "Review stale branches"],
+  removableWorktrees: ["Removable worktrees", "Review removable worktrees"],
+  staleWorktrees: ["Stale unmerged worktrees", "Review stale worktrees"],
+  reclaimableSpace: ["Build and dependency directories", "Review disk space"],
+};
 
-function ProblemCard({
-  card,
-  busy,
-  labels,
-  onFix,
-  onShow,
-}: { card: Card; busy: boolean; labels: Map<string, string> } & Pick<Props, "onFix" | "onShow">) {
-  const info = PROBLEMS[card.kind];
-  const title = info.title(card.paths.length, card.items);
+function Finding({ card, onOpen }: { card: Card; onOpen: Props["onOpenFinding"] }) {
+  const { kind, paths, items } = card;
+  const info = PROBLEMS[kind];
+  const detail = info.title(paths.length, items);
+  const [title, action] = FINDING_LABELS[kind];
   return (
-    <li className={`card card-${info.severity}`} aria-label={title}>
-      <div className="card-text">
+    <li className={`finding finding-${info.severity}`} aria-label={detail}>
+      <div>
         <strong>{title}</strong>
-        <RepoNames paths={card.paths} labels={labels} />
+        <div className="muted finding-detail">{detail}</div>
       </div>
-      <div className="card-actions">
-        {info.fix && (
-          <button disabled={busy} onClick={() => onFix(info.fix!, card.paths)}>
-            {FIX_LABELS[info.fix]}
-          </button>
-        )}
-        <button className="link" onClick={() => onShow(title, card.paths)}>
-          Show
-        </button>
-      </div>
+      <button className="link" onClick={() => onOpen(kind, detail, paths)}>
+        {action} <span aria-hidden="true">›</span>
+      </button>
     </li>
   );
 }
 
+function SectionTitle({
+  title,
+  icon,
+  findings,
+  onShow,
+}: {
+  title: string;
+  icon: "attention" | "work" | "cleanup";
+  findings: Card[];
+  onShow: Props["onShow"];
+}) {
+  const paths = [...new Set(findings.flatMap((card) => card.paths))];
+  const count = `${paths.length} ${paths.length === 1 ? "repository" : "repositories"}`;
+  return (
+    <div className="dashboard-section-title">
+      <h2>
+        <Icon name={icon} />
+        {title}
+      </h2>
+      {paths.length > 0 && (
+        <button
+          className="link"
+          aria-label={`View all ${count} in ${title}`}
+          onClick={() => onShow(title, paths)}
+        >
+          ({count})
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function Dashboard(props: Props) {
-  const overview = buildOverview(props.paths, props.states, props.healths, props.reclaimable);
-  const labels = uniqueLabels(props.paths);
+  const { cards, healthy } = buildOverview(
+    props.paths,
+    props.states,
+    props.healths,
+    props.reclaimable,
+  );
   const { oldestFetchUnix, neverFetched } = props.freshness;
   const stale = isStale(props.nowUnix, oldestFetchUnix) || neverFetched > 0;
+  const attention = cards.filter((card) => PROBLEMS[card.kind].section === "attention");
+  const updates = cards.filter((card) => PROBLEMS[card.kind].section === "updates");
+  const work = cards.filter((card) => PROBLEMS[card.kind].section === "work");
+  const housekeeping = cards.filter((card) => PROBLEMS[card.kind].section === "housekeeping");
+  const list = (label: string, items: Card[]) =>
+    items.length > 0 && (
+      <ul className="finding-list" aria-label={label}>
+        {items.map((card) => (
+          <Finding key={card.kind} card={card} onOpen={props.onOpenFinding} />
+        ))}
+      </ul>
+    );
+  const healthyLabel = `${healthy.length} ${healthy.length === 1 ? "repository" : "repositories"} clean and in sync at last fetch`;
 
   return (
-    <section className="dashboard" aria-label="Overview">
-      <div className="toolbar dashboard-header">
-        <span>
-          <strong>{props.paths.length}</strong>{" "}
-          {props.paths.length === 1 ? "repository" : "repositories"}
-          {" · "}
-          <strong>{overview.needsAttention.length}</strong> need attention
-        </span>
-        <span className="freshness">
-          <span className={stale ? "stale" : "muted"}>
-            {oldestFetchUnix === null
-              ? "Never fetched"
-              : `Oldest fetch ${formatRecent(props.nowUnix, oldestFetchUnix)}`}
-            {neverFetched > 0 && oldestFetchUnix !== null && ` · ${neverFetched} never fetched`}
-          </span>
-          <button disabled={props.busy || props.paths.length === 0} onClick={props.onFetchAll}>
-            Fetch all
-          </button>
-          <span className="muted" role="status" aria-label="Scan status">
-            {props.pendingScans > 0
-              ? `Checking branches… ${props.pendingScans} left`
-              : props.lastScannedUnix !== undefined
-                ? `Checked ${formatRecent(props.nowUnix, props.lastScannedUnix)}`
-                : ""}
-          </span>
-          <button className="link" disabled={props.pendingScans > 0} onClick={props.onRescan}>
-            Recheck
-          </button>
-        </span>
-      </div>
-
-      {SECTIONS.map(([section, label]) => {
-        const cards = overview.cards.filter((card) => PROBLEMS[card.kind].section === section);
-        if (cards.length === 0) return null;
-        return (
-          <div key={section} className="dashboard-section">
-            <h3>{label}</h3>
-            <ul className="cards" aria-label={label}>
-              {cards.map((card) => (
-                <ProblemCard
-                  key={card.kind}
-                  card={card}
-                  labels={labels}
-                  busy={props.busy}
-                  onFix={props.onFix}
-                  onShow={props.onShow}
-                />
-              ))}
-            </ul>
-          </div>
-        );
-      })}
-      {overview.healthy.length > 0 && (
-        <div className="dashboard-section">
-          <h3>Up to date</h3>
-          <ul className="cards" aria-label="Up to date">
-            <li
-              className="card card-success"
-              aria-label={`${overview.healthy.length} up to date and clean`}
+    <section className="dashboard" aria-labelledby="overview-heading">
+      <header className="page-heading dashboard-heading">
+        <h1 id="overview-heading">Overview</h1>
+        <p className="muted">{props.scopeSummary}</p>
+        <div className="overview-operations" role="group" aria-label="Workspace operations">
+          <div className="overview-operation">
+            <button
+              className="primary-button"
+              disabled={props.busy || props.paths.length === 0}
+              onClick={props.onFetchAll}
             >
-              <div className="card-text">
-                <strong>
-                  {overview.healthy.length}{" "}
-                  {overview.healthy.length === 1 ? "repository is" : "repositories are"} up to date
-                  and clean
-                </strong>
-                <RepoNames paths={overview.healthy} labels={labels} />
-              </div>
-              <div className="card-actions">
-                <button
-                  className="link"
-                  onClick={() => props.onShow("Up to date and clean", overview.healthy)}
-                >
-                  Show
-                </button>
-              </div>
-            </li>
-          </ul>
+              Fetch all {props.paths.length}
+            </button>
+            <span className={stale ? "stale" : "muted"}>
+              {oldestFetchUnix !== null &&
+                `Oldest fetch ${formatRecent(props.nowUnix, oldestFetchUnix)}`}
+              {neverFetched > 0 &&
+                `${oldestFetchUnix !== null ? " · " : ""}${neverFetched} never fetched`}
+            </span>
+          </div>
+          <div className="overview-operation">
+            <button className="link" disabled={props.pendingScans > 0} onClick={props.onRescan}>
+              Refresh local status
+            </button>
+            <span className="muted" role="status" aria-label="Scan status">
+              {props.pendingScans > 0
+                ? `Checking branches… ${props.pendingScans} left`
+                : props.lastScannedUnix !== undefined
+                  ? `Checked ${formatRecent(props.nowUnix, props.lastScannedUnix)}`
+                  : ""}
+            </span>
+          </div>
         </div>
+      </header>
+      {(attention.length > 0 || updates.length > 0) && (
+        <section className="dashboard-section dashboard-attention">
+          <SectionTitle
+            title="Needs attention"
+            icon="attention"
+            findings={attention.length + updates.length > 1 ? [...attention, ...updates] : []}
+            onShow={props.onShow}
+          />
+          <div className="finding-panel">
+            {list("Needs attention", attention)}
+            {list("Updates available", updates)}
+          </div>
+        </section>
       )}
-      {overview.cards.length === 0 && overview.healthy.length === props.paths.length && (
-        <p className="empty muted">Everything is up to date. Nothing needs attention.</p>
+      <div className="dashboard-columns">
+        {work.length > 0 && (
+          <section className="dashboard-section dashboard-work">
+            <SectionTitle
+              title="Work in progress"
+              icon="work"
+              findings={work}
+              onShow={props.onShow}
+            />
+            {list("Work in progress", work)}
+          </section>
+        )}
+        {housekeeping.length > 0 && (
+          <section className="dashboard-section">
+            <SectionTitle
+              title="Cleanup"
+              icon="cleanup"
+              findings={housekeeping}
+              onShow={props.onShow}
+            />
+            {list("Cleanup", housekeeping)}
+          </section>
+        )}
+      </div>
+      {healthy.length > 0 && (
+        <div className="healthy-summary">
+          <strong>{healthyLabel}</strong>
+          <button className="link" onClick={() => props.onShow(healthyLabel, healthy)}>
+            View repositories <span aria-hidden="true">›</span>
+          </button>
+        </div>
       )}
     </section>
   );

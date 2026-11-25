@@ -61,7 +61,6 @@ export function useFleetScan(paths: string[]) {
       lastScannedUnix = entry.scannedUnix;
     }
   }
-  const pending = paths.filter((path) => !entries[path] || inFlight.has(path)).length;
 
-  return { healths, entries, pending, lastScannedUnix, scan };
+  return { healths, entries, inFlight, lastScannedUnix, scan };
 }

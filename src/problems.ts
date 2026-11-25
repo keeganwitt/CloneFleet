@@ -86,7 +86,7 @@ export const PROBLEMS: Record<ProblemKind, ProblemInfo> = {
   uncommitted: {
     section: "work",
     severity: "neutral",
-    title: (n) => `${repos(n)} with uncommitted changes`,
+    title: (n) => `${repos(n)} with working tree changes`,
   },
   stashes: {
     section: "work",
@@ -161,7 +161,7 @@ export function repoProblems(
     if (summary.defaultBranch && summary.branch !== summary.defaultBranch) {
       found.push(["notOnDefault", 1]);
     }
-    if (summary.trackedChanges > 0) found.push(["uncommitted", 1]);
+    if (summary.trackedChanges > 0 || summary.untracked > 0) found.push(["uncommitted", 1]);
   }
   if (health) {
     if (health.unpushedBranches > 0) found.push(["unpushed", health.unpushedBranches]);
@@ -212,7 +212,9 @@ export function buildOverview(
     const severities = problems.map(([kind]) => PROBLEMS[kind].severity);
     if (severities.some((s) => s !== "neutral")) needsAttention.push(path);
     else if (
-      repo.summary &&
+      repo.summary?.upstream &&
+      (repo.summary.ahead ?? 0) === 0 &&
+      repo.summary.lastFetchUnix !== null &&
       problems.every(([kind]) => PROBLEMS[kind].section === "housekeeping")
     ) {
       healthy.push(path);

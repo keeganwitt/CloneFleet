@@ -6,6 +6,10 @@ describe("parseArgs", () => {
     expect(parseArgs([], "/tmp/default")).toEqual({ dir: "/tmp/default", app: undefined });
   });
 
+  it("supports preparing a screenshot fixture without launching the app", () => {
+    expect(parseArgs(["--prepare-only"], "/tmp/default")).toMatchObject({ prepareOnly: true });
+  });
+
   it("accepts a directory and app, and rejects unknown or incomplete options", () => {
     const options = parseArgs(["--dir", "/x/demo", "--app", "/Apps/CloneFleet"], "/tmp/d");
     expect(options).toEqual({ dir: "/x/demo", app: "/Apps/CloneFleet" });

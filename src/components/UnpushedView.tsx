@@ -18,6 +18,7 @@ type RepoUnpushed =
 
 interface Props {
   paths: string[];
+  initialFilter?: "unpushed" | "stashes";
   onChanged: (paths: string[]) => void;
 }
 
@@ -89,7 +90,10 @@ export function describeUnpushedBranch(branch: UnpushedBranch): string {
   return `${commits} (${where})${merged}`;
 }
 
-export function UnpushedView({ paths, onChanged }: Props) {
+export function UnpushedView({ paths, initialFilter, onChanged }: Props) {
+  const [workFilter, setWorkFilter] = useState<"all" | "unpushed" | "stashes" | "changes">(
+    initialFilter ?? "all",
+  );
   const [fetchFirst, setFetchFirst] = useState(true);
   const [hideClean, setHideClean] = useState(true);
   const [ageFilter, setAgeFilter] = useState(false);
@@ -131,14 +135,25 @@ export function UnpushedView({ paths, onChanged }: Props) {
 
   const shownEntry = (repo: string): RepoUnpushed | undefined => {
     const entry = reports[repo];
-    return entry?.status === "loaded"
-      ? { ...entry, report: olderThan(entry.report, nowUnix, ageFilter ? minAgeDays : null) }
-      : entry;
+    if (entry?.status !== "loaded") return entry;
+    const report = olderThan(entry.report, nowUnix, ageFilter ? minAgeDays : null);
+    return {
+      ...entry,
+      report: {
+        ...report,
+        branches: workFilter === "all" || workFilter === "unpushed" ? report.branches : [],
+        stashes: workFilter === "all" || workFilter === "stashes" ? report.stashes : [],
+        dirtyWorktrees:
+          workFilter === "all" || workFilter === "changes" ? report.dirtyWorktrees : [],
+      },
+    };
   };
   const loaded = paths.flatMap((repo) => {
     const entry = shownEntry(repo);
     return entry?.status === "loaded" ? [[repo, entry.report] as const] : [];
   });
+  const failed = paths.filter((repo) => reports[repo]?.status === "error").length;
+  const finished = loaded.length + failed;
   const withWork = loaded.filter(([, report]) => hasUnpushedWork(report)).length;
   const stashTargets = loaded.flatMap(([repo, report]) =>
     report.stashes.map((s) => key(repo, s.sha)).filter((k) => selectedStashes.has(k)),
@@ -242,12 +257,23 @@ export function UnpushedView({ paths, onChanged }: Props) {
       </div>
 
       <div className="toolbar">
-        <span className="muted">
-          {loaded.length < paths.length
-            ? `Analyzed ${loaded.length} of ${paths.length}…`
+        <select
+          aria-label="Local work type"
+          value={workFilter}
+          onChange={(event) => setWorkFilter(event.target.value as typeof workFilter)}
+        >
+          <option value="all">All local work</option>
+          <option value="unpushed">Unpushed branches</option>
+          <option value="stashes">Stashes</option>
+          <option value="changes">Uncommitted changes</option>
+        </select>
+        <span className="muted" role="status">
+          {finished < paths.length
+            ? `Analyzed ${finished} of ${paths.length}…`
             : `${withWork} of ${plural(paths.length, "repository", "repositories")} ${
                 withWork === 1 ? "has" : "have"
               } unpushed work${ageFilter ? ` older than ${minAgeDays} days` : ""}`}
+          {failed > 0 && ` · ${failed} analysis ${failed === 1 ? "failed" : "failures"}`}
         </span>
         <label>
           <input

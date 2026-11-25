@@ -39,6 +39,7 @@ export const api = {
   clearRecent: () => invoke<WorkspaceView>("clear_recent"),
   addDirectories: (paths: string[]) => invoke<WorkspaceView>("add_directories", { paths }),
   removeDirectory: (path: string) => invoke<WorkspaceView>("remove_directory", { path }),
+  closeAllDirectories: () => invoke<WorkspaceView>("close_all_directories"),
   rescanWorkspace: () => invoke<WorkspaceView>("rescan_workspace"),
   removeRepos: (paths: string[]) => invoke<WorkspaceView>("remove_repos", { paths }),
   restoreExcluded: () => invoke<WorkspaceView>("restore_excluded"),

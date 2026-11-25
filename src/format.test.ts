@@ -97,7 +97,7 @@ describe("describeSync", () => {
   });
 
   it("shows ahead and behind counts", () => {
-    expect(describeSync({ ...clean, ahead: 2, behind: 5 })).toBe("↑2 ↓5");
-    expect(describeSync({ ...clean, behind: 1 })).toBe("↓1");
+    expect(describeSync({ ...clean, ahead: 2, behind: 5 })).toBe("2 ahead · 5 behind");
+    expect(describeSync({ ...clean, behind: 1 })).toBe("1 behind");
   });
 });

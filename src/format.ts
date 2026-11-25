@@ -62,5 +62,7 @@ export function describeSync(summary: RepoSummary): string {
   const ahead = summary.ahead ?? 0;
   const behind = summary.behind ?? 0;
   if (ahead === 0 && behind === 0) return "Up to date";
-  return [ahead > 0 ? `↑${ahead}` : "", behind > 0 ? `↓${behind}` : ""].filter(Boolean).join(" ");
+  return [ahead > 0 ? `${ahead} ahead` : "", behind > 0 ? `${behind} behind` : ""]
+    .filter(Boolean)
+    .join(" · ");
 }

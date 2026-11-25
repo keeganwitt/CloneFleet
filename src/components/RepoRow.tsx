@@ -36,6 +36,7 @@ function followUpLabel(action: Action): string {
 
 interface Props {
   repo: RepoState;
+  label?: string;
   selected: boolean;
   nowUnix: number;
   onToggle: (extendRange: boolean) => void;
@@ -46,6 +47,7 @@ interface Props {
 
 export function RepoRow({
   repo,
+  label,
   selected,
   nowUnix,
   onToggle,
@@ -76,7 +78,7 @@ export function RepoRow({
         <td>
           <input
             type="checkbox"
-            aria-label={`Select ${name}`}
+            aria-label={`Select ${label ?? name}`}
             checked={selected}
             onChange={(event) => onToggle((event.nativeEvent as MouseEvent).shiftKey === true)}
           />
@@ -84,13 +86,13 @@ export function RepoRow({
         <td>
           <button
             className="repo-name file-button"
-            aria-label={`Open details for ${name}`}
+            aria-label={`Open details for ${label ?? name}`}
             onClick={() => onOpenDetails("branches")}
           >
             {name}
           </button>
           <div className="repo-path truncate-start muted" title={repo.path}>
-            <span>{parentDirectory(repo.path)}</span>
+            <span>{basename(parentDirectory(repo.path))}</span>
           </div>
         </td>
         <td>
@@ -133,7 +135,11 @@ export function RepoRow({
         <td>
           {summary && (
             <>
-              {describeSync(summary)}
+              {describeSync(summary) === "Up to date" && isStale(nowUnix, summary.lastFetchUnix)
+                ? summary.lastFetchUnix === null
+                  ? "Sync unverified"
+                  : "In sync at last fetch"
+                : describeSync(summary)}
               {summary.hasRemotes ? (
                 <div
                   className={`muted fetched${isStale(nowUnix, summary.lastFetchUnix) ? " stale" : ""}`}

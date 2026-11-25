@@ -80,11 +80,10 @@ describe("formatAge", () => {
 describe("worktreeState", () => {
   const state = (overrides: Partial<WorktreeInfo>) => worktreeState(worktree(overrides), NOW, 90);
 
-  it("preselects merged and missing worktrees", () => {
-    expect(state({})).toMatchObject({ category: "merged", selectable: true, preselected: true });
+  it("identifies merged and missing worktrees", () => {
+    expect(state({})).toMatchObject({ category: "merged", selectable: true });
     expect(state({ prunable: true, merged: null, dirty: null })).toMatchObject({
       category: "merged",
-      preselected: true,
       label: "Directory missing; removing it clears git's record of it",
     });
   });
@@ -93,7 +92,6 @@ describe("worktreeState", () => {
     expect(state({ merged: null, lastCommitUnix: NOW - 200 * DAY })).toEqual({
       category: "stale",
       selectable: true,
-      preselected: false,
       label: "Not merged; removing it keeps feature",
     });
     expect(state({ merged: null })).toMatchObject({ category: "active", selectable: true });

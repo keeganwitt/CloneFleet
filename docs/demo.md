@@ -6,9 +6,10 @@
 pnpm demo                                   # tauri dev on a fresh demo home
 pnpm demo --dir ~/tmp/clonefleet-demo       # somewhere other than the system temp folder
 pnpm demo --app /Applications/CloneFleet.app/Contents/MacOS/CloneFleet   # a built app
+pnpm --silent demo --prepare-only --dir /tmp/clonefleet-demo             # print the fixture environment as JSON
 ```
 
-Each run rewrites the demo home, so commit ages and fetch times are relative to now. Rerun the command to reset it, along with anything you changed in the demo.
+Each run rewrites the demo home, so commit ages and fetch times are relative to now. The workspace opens with libraries, reference, services, and tools as separate directories. Rerun the command to reset it, along with anything you changed in the demo.
 
 ## What's in it
 
@@ -47,6 +48,7 @@ The launcher sets these variables for CloneFleet and every git command it runs:
 
 | Variable                | Points at                                                           |
 | ----------------------- | ------------------------------------------------------------------- |
+| `CLONEFLEET_DEMO`       | `1`, so the native window title reads **CloneFleet** in screenshots |
 | `CLONEFLEET_CONFIG_DIR` | `config/` in the demo home (directories, recent sets, settings)     |
 | `GIT_CONFIG_GLOBAL`     | the demo's `gitconfig` (author, URL rewrites, no hooks, no signing) |
 | `GIT_CONFIG_NOSYSTEM`   | `1`, so system-wide git settings don't apply                        |
@@ -67,12 +69,17 @@ cargo run --manifest-path src-tauri/Cargo.toml --example demo_home -- /tmp/clone
 1. Run `pnpm demo` and resize the window to 1400 × 860 points. Leave the theme on System, or switch it in Settings for a dark capture.
 2. Capture each screen. On macOS, `screencapture -o -l <window id> docs/screenshots/<name>.png` captures just the window (Screen Recording permission is required), or press ⇧⌘4, then Space, then ⌥-click the window.
 
-| File                                        | Screen                                                                                  |
-| ------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `docs/screenshots/overview.png`             | **Overview**, right after launch                                                        |
-| `docs/screenshots/repositories.png`         | **Repositories**, with `api-gateway`, `billing-service`, and `design-system` selected   |
-| `docs/screenshots/cleanup.png`              | **Branch cleanup**                                                                      |
-| `docs/screenshots/branch-diff.png`          | **Branch cleanup**, then click `eslint-9` to open its details on the **Branches** tab   |
-| `docs/screenshots/remotes.png`              | **Remotes** after **Check all remotes**                                                 |
-| `docs/screenshots/disk-cleanup.png`         | **Disk cleanup** with **Needs reinstalling** and **May not be reproducible** also shown |
-| `docs/screenshots/disk-cleanup-deleted.png` | The same, after **Delete 1 directory** removes the preselected `dist`                   |
+| File                                        | Screen                                                                                                                                       |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docs/screenshots/overview.png`             | **Overview**, after the background checks finish                                                                                             |
+| `docs/screenshots/repositories-before.png`  | **Repositories → All repositories**, with no selection                                                                                       |
+| `docs/screenshots/repositories.png`         | The same view with `api-gateway`, `billing-service`, and `design-system` selected                                                            |
+| `docs/screenshots/cleanup.png`              | **Cleanup → Branches & worktrees**, with `docs/storybook-intro`, `chore/eslint-9`, and the `design-system-button-variants` worktree selected |
+| `docs/screenshots/cleanup-review.png`       | **Review 3 items…** from that selection                                                                                                      |
+| `docs/screenshots/branch-diff.png`          | Return to the selection, then open `chore/eslint-9`                                                                                          |
+| `docs/screenshots/remotes.png`              | **Repositories → Remotes** after **Check all remotes**                                                                                       |
+| `docs/screenshots/disk-cleanup.png`         | **Cleanup → Disk space**, with all directory types shown                                                                                     |
+| `docs/screenshots/inactive-clones.png`      | **Cleanup → Inactive clones**, after analysis finishes                                                                                       |
+| `docs/screenshots/disk-cleanup-review.png`  | Select `shared-utils/dist` and open **Review 1 directory…**                                                                                  |
+| `docs/screenshots/disk-cleanup-deleted.png` | On the demo fixture, choose **Delete permanently** and confirm                                                                               |
+| `docs/screenshots/inactive-review.png`      | Select `ml-experiments` and open **Review 1 clone…**                                                                                         |

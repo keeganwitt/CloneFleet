@@ -49,11 +49,11 @@ describe("ActivityView", () => {
   it("updates live and clears", async () => {
     const user = userEvent.setup();
     render(<ActivityView />);
-    expect(screen.getByText("Nothing has run yet.")).toBeInTheDocument();
+    expect(screen.getByText("No actions logged this session.")).toBeInTheDocument();
     act(() => seed());
     expect(screen.getByText("Fetched origin")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Clear" }));
-    expect(screen.getByText("Nothing has run yet.")).toBeInTheDocument();
+    expect(screen.getByText("No actions logged this session.")).toBeInTheDocument();
   });
 
   it("saves the shown entries to a chosen file", async () => {

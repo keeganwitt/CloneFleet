@@ -43,7 +43,7 @@ export function ActivityView() {
         </button>
       </div>
       <p className="muted">
-        Every action CloneFleet ran during this session. Expand one to see its git commands.
+        Repository actions recorded during this session. Expand an entry to see its Git commands.
       </p>
       <div className="toolbar">
         <input
@@ -71,9 +71,24 @@ export function ActivityView() {
         </p>
       )}
       {shown.length === 0 ? (
-        <p className="empty muted">
-          {entries.length === 0 ? "Nothing has run yet." : "No entries match."}
-        </p>
+        <div className="empty muted">
+          <p>
+            {entries.length === 0
+              ? "No actions logged this session."
+              : "No entries match these filters."}
+          </p>
+          {entries.length > 0 && (
+            <button
+              className="link"
+              onClick={() => {
+                setSearch("");
+                setFailuresOnly(false);
+              }}
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
       ) : (
         <ol className="activity-log" aria-label="Activity log">
           {shown.slice(0, MAX_SHOWN).map((entry) => (

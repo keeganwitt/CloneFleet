@@ -79,7 +79,7 @@ export function formatAge(nowUnix: number, thenUnix: number): string {
 export interface WorktreeState {
   category: BranchCategory;
   selectable: boolean;
-  preselected: boolean;
+
   label: string;
 }
 
@@ -91,7 +91,7 @@ export function worktreeState(
   const blocked = (label: string): WorktreeState => ({
     category: "protected",
     selectable: false,
-    preselected: false,
+
     label,
   });
   if (worktree.isMain) return blocked("Main worktree");
@@ -100,7 +100,7 @@ export function worktreeState(
     return {
       category: "merged",
       selectable: true,
-      preselected: true,
+
       label: "Directory missing; removing it clears git's record of it",
     };
   }
@@ -109,7 +109,7 @@ export function worktreeState(
     return {
       category: "merged",
       selectable: true,
-      preselected: true,
+
       label: `${capitalize(EVIDENCE_LABELS[worktree.merged.evidence])} ${worktree.merged.base}`,
     };
   }
@@ -120,7 +120,7 @@ export function worktreeState(
   return {
     category: stale ? "stale" : "active",
     selectable: true,
-    preselected: false,
+
     label: `Not merged; removing it keeps ${worktree.branch}`,
   };
 }

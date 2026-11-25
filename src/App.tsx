@@ -1,26 +1,29 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { api } from "./api";
 import { formatRecent } from "./cleanup";
-import { AboutDialog } from "./components/AboutDialog";
-import { ActionPanel, SelectionLine } from "./components/ActionBar";
+import { ActionPanel } from "./components/ActionBar";
+import { TriStateCheckbox } from "./components/BranchTree";
 import { ActivityView } from "./components/ActivityView";
 import { ArtifactsView } from "./components/ArtifactsView";
-import { CleanupView } from "./components/CleanupView";
+import { CleanupView, type CleanupCategory } from "./components/CleanupView";
 import { Dashboard } from "./components/Dashboard";
 import { FilterBar } from "./components/FilterBar";
 import { RepoDetailPanel, type DetailTab } from "./components/RepoDetailPanel";
+import { ReviewDialog } from "./components/ReviewDialog";
 import { RemotesView } from "./components/RemotesView";
 import { RepoRow } from "./components/RepoRow";
 import { RunSummaryBar } from "./components/RunSummaryBar";
 import { SettingsDialog } from "./components/SettingsDialog";
+import { Icon } from "./components/Icon";
 import { InactiveView } from "./components/InactiveView";
 import { UnpushedView } from "./components/UnpushedView";
 import { WorkspaceBar } from "./components/WorkspaceBar";
 import { defaultFilters, matchesFilters, type Filters } from "./filters";
 import { pendingFollowUps } from "./followUps";
-import { uniqueLabels } from "./format";
+import { isWithin, uniqueLabels } from "./format";
+import logo from "../assets/clonefleet.svg";
 import { fleetFreshness, isStale } from "./freshness";
-import type { Fix } from "./problems";
+import type { ProblemKind } from "./problems";
 import { describePushes } from "./push";
 import { summarizeRun, type RunStatus } from "./runSummary";
 import { defaultSort, nextSort, sortPaths, type Sort, type SortKey } from "./sorting";
@@ -34,20 +37,41 @@ import { useRepoManager } from "./useRepoManager";
 import { useSettings } from "./useSettings";
 import "./App.css";
 
-type Page =
-  | { kind: "overview" }
-  | { kind: "repos" }
-  | { kind: "cleanup"; paths: string[] }
-  | { kind: "artifacts"; paths: string[] }
-  | { kind: "unpushed"; paths: string[] }
-  | { kind: "inactive"; paths: string[] }
-  | { kind: "remotes"; paths: string[] }
-  | { kind: "activity" };
+type PageKind =
+  "overview" | "repos" | "cleanup" | "artifacts" | "unpushed" | "inactive" | "remotes" | "activity";
+type LocalWorkFilter = "unpushed" | "stashes";
 
-const FIX_ACTIONS: Partial<Record<Fix, Action>> = {
-  pull: { type: "pull" },
-  checkoutDefault: { type: "checkoutDefault" },
-};
+interface Page {
+  kind: PageKind;
+  paths?: string[];
+  category?: CleanupCategory;
+  localWork?: LocalWorkFilter;
+}
+
+const REPOSITORY_TABS = [
+  ["repos", "All repositories"],
+  ["unpushed", "Local work"],
+  ["remotes", "Remotes"],
+] as const;
+
+const CLEANUP_TABS = [
+  ["cleanup", "Branches & worktrees"],
+  ["artifacts", "Disk space"],
+  ["inactive", "Inactive clones"],
+] as const;
+
+const NAV_ITEMS = [
+  ["overview", "Overview"],
+  ["repos", "Repositories"],
+  ["cleanup", "Cleanup"],
+  ["activity", "Activity"],
+] as const;
+
+function sectionOf(kind: PageKind) {
+  if (REPOSITORY_TABS.some(([tab]) => tab === kind)) return "repos";
+  if (CLEANUP_TABS.some(([tab]) => tab === kind)) return "cleanup";
+  return kind;
+}
 
 function App() {
   const manager = useRepoManager();
@@ -62,8 +86,24 @@ function App() {
   }
   const nowUnix = useNow();
   const [page, setPage] = useState<Page>({ kind: "overview" });
+  const [directory, setDirectory] = useState("");
+  const [review, setReview] = useState<{ paths: string[]; action: Action }>();
+  const scopePaths = useMemo(
+    () => state.order.filter((path) => !directory || isWithin(path, directory)),
+    [directory, state.order],
+  );
+  const toolPaths = useMemo(() => {
+    if (!page.paths) return scopePaths;
+    const included = new Set(page.paths);
+    return scopePaths.filter((path) => included.has(path));
+  }, [page.paths, scopePaths]);
+  const section = sectionOf(page.kind);
+  const scopeLabel = directory
+    ? uniqueLabels(manager.workspace.roots.map((root) => root.path)).get(directory)
+    : undefined;
+  const workspaceCount = manager.workspace.roots.length;
+  const scopeSummary = `${scopePaths.length} ${scopePaths.length === 1 ? "repository" : "repositories"}${scopeLabel ? ` in ${scopeLabel}` : ` across ${workspaceCount} ${workspaceCount === 1 ? "directory" : "directories"}`}`;
   const [showSettings, setShowSettings] = useState(false);
-  const [showAbout, setShowAbout] = useState(false);
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [pathFilter, setPathFilter] = useState<{ label: string; paths: string[] }>();
   const [resultFilter, setResultFilter] = useState<RunStatus>();
@@ -75,13 +115,14 @@ function App() {
   const resultPaths =
     resultFilter && runSummary ? new Set(runSummary.byStatus[resultFilter]) : undefined;
   const pinned = pathFilter && new Set(pathFilter.paths);
-  const filtered = state.order.filter(
+  const filtered = scopePaths.filter(
     (path) =>
       (!pinned || pinned.has(path)) &&
       (!resultPaths || resultPaths.has(path)) &&
       matchesFilters(state.repos[path], filters),
   );
   const visible = sortPaths(filtered, state.repos, sort);
+  const repoLabels = uniqueLabels(scopePaths);
   const sortHeader = (key: SortKey, label: string) => (
     <th aria-sort={sort.key === key ? sort.direction : undefined}>
       <button className="sort-button" onClick={() => setSort(nextSort(sort, key))}>
@@ -95,8 +136,7 @@ function App() {
   const targets = visible.filter((path) => state.selected.has(path));
   const hiddenSelected = state.selected.size - targets.length;
   const busy = targets.some((p) => isBusy(state.repos[p]));
-  const anyBusy = state.order.some((p) => isBusy(state.repos[p]));
-  const allVisibleSelected = targets.length > 0 && targets.length === visible.length;
+  const anyBusy = scopePaths.some((p) => isBusy(state.repos[p]));
   const freshness = fleetFreshness(visible, state.repos);
 
   const toggle = (path: string, extendRange: boolean) => {
@@ -111,7 +151,7 @@ function App() {
     setAnchor(path);
   };
 
-  const scope = page.kind === "overview" ? state.order : visible;
+  const scope = page.kind === "overview" ? scopePaths : visible;
   const pendingPushes = pendingFollowUps(scope, state.repos, "push").map(
     ([path, action]): [string, PushPlan] => [path, action.plan],
   );
@@ -120,8 +160,9 @@ function App() {
 
   const runJobs = async (jobs: [string, Action][]) => {
     setResultFilter(undefined);
-    await manager.runBulk(jobs);
-    void fleet.scan(jobs.map(([path]) => path));
+    const outcomes = await manager.runBulk(jobs);
+    void fleet.scan([...new Set(jobs.map(([path]) => path))]);
+    return outcomes;
   };
   const runOn = (paths: string[], action: Action) =>
     runJobs(paths.map((path): [string, Action] => [path, action]));
@@ -146,146 +187,180 @@ function App() {
     setPage({ kind: "repos" });
   };
 
-  const fix = (kind: Fix, paths: string[]) => {
-    const action = FIX_ACTIONS[kind];
-    if (action) void runOn(paths, action);
-    else if (kind === "reviewUnpushed") setPage({ kind: "unpushed", paths });
-    else if (kind === "cleanup") setPage({ kind: "cleanup", paths });
-    else if (kind === "cleanArtifacts") setPage({ kind: "artifacts", paths });
+  const openFinding = (kind: ProblemKind, label: string, paths: string[]) => {
+    switch (kind) {
+      case "unpushed":
+      case "stashes":
+        setPage({ kind: "unpushed", paths, localWork: kind });
+        break;
+      case "mergedBranches":
+      case "staleBranches":
+      case "removableWorktrees":
+      case "staleWorktrees":
+        setPage({
+          kind: "cleanup",
+          paths,
+          category:
+            kind === "mergedBranches"
+              ? "merged"
+              : kind === "staleBranches"
+                ? "stale"
+                : kind === "staleWorktrees"
+                  ? "staleWorktrees"
+                  : "worktrees",
+        });
+        break;
+      case "reclaimableSpace":
+        setPage({ kind: "artifacts", paths });
+        break;
+      default:
+        show(label, paths);
+    }
   };
 
-  const navigate = (next: Page) => {
-    if (next.kind === "repos") setPathFilter(undefined);
-    setPage(next);
+  const navigate = (kind: PageKind) => {
+    if (kind === "repos") setPathFilter(undefined);
+    setPage({ kind });
+  };
+
+  const startAction = (action: Action) => {
+    if (action.type === "pull" || action.type === "checkoutDefault")
+      setReview({ paths: targets, action });
+    else void runOn(targets, action);
+  };
+  const changeDirectory = (path: string, kind = page.kind) => {
+    setDirectory(path);
+    setPathFilter(undefined);
+    setResultFilter(undefined);
+    setPage({ kind });
+    manager.setSelection([...state.selected], false);
+  };
+  const refreshScope = () => {
+    changed(scopePaths);
+    void artifactScan.scan(scopePaths);
   };
 
   const listPage = page.kind === "overview" || page.kind === "repos";
-  const recentLabels = uniqueLabels([
-    ...manager.workspace.roots.map((root) => root.path),
-    ...manager.workspace.recent.flat(),
-  ]);
-  const navButton = ([target, label]: [Page, string]) => (
-    <button
-      key={label}
-      aria-current={page.kind === target.kind ? "page" : undefined}
-      onClick={() => navigate(target)}
-    >
-      {label}
-    </button>
-  );
-  const scoped =
-    (page.kind === "cleanup" ||
-      page.kind === "artifacts" ||
-      page.kind === "unpushed" ||
-      page.kind === "inactive" ||
-      page.kind === "remotes") &&
-    page.paths.length < state.order.length
-      ? page
-      : undefined;
-  const navItems: [Page, string][] = [
-    [{ kind: "overview" }, "Overview"],
-    [{ kind: "repos" }, "Repositories"],
-    [{ kind: "cleanup", paths: state.order }, "Branch cleanup"],
-    [{ kind: "artifacts", paths: state.order }, "Disk cleanup"],
-    [{ kind: "unpushed", paths: state.order }, "Unpushed work"],
-    [{ kind: "inactive", paths: state.order }, "Inactive clones"],
-    [{ kind: "remotes", paths: state.order }, "Remotes"],
-    [{ kind: "activity" }, "Activity"],
-  ];
+  const tabs =
+    section === "repos" ? REPOSITORY_TABS : section === "cleanup" ? CLEANUP_TABS : undefined;
+  const reviewTitle = review?.action.type === "pull" ? "Review pull" : "Review branch switch";
+  const reviewCount = review
+    ? `${review.paths.length} ${review.paths.length === 1 ? "repository" : "repositories"}`
+    : "";
+  const summaryVisible = listPage || (runSummary?.running ?? 0) > 0;
 
   return (
-    <main>
-      <header className="toolbar">
-        <button onClick={manager.openDirectories}>Open directory…</button>
-        <button onClick={manager.addDirectories}>Add directory…</button>
-        {manager.workspace.recent.length > 0 && (
-          <select
-            aria-label="Open recent"
-            value=""
-            onChange={(event) => {
-              if (event.target.value === "clear") {
-                void manager.clearRecent();
-                return;
-              }
-              const entry = manager.workspace.recent[Number(event.target.value)];
-              if (entry) {
-                setFilters(defaultFilters);
-                setPathFilter(undefined);
-                void manager.openRecent(entry);
-              }
-            }}
-          >
-            <option value="">Recent…</option>
-            {manager.workspace.recent.map((roots, index) => (
-              <option key={roots.join("\n")} value={index}>
-                {roots.map((root) => recentLabels.get(root)).join(" + ")}
-              </option>
-            ))}
-            <option value="clear">Clear recent</option>
-          </select>
-        )}
-        <span className="spacer" />
-        <button className="link" onClick={() => setShowAbout(true)}>
-          About
-        </button>
-        <button disabled={!settings.view} onClick={() => setShowSettings(true)}>
-          Settings
-        </button>
-      </header>
-
-      {settings.view?.activeGit.error && (
-        <div className="notice error" role="alert">
-          {settings.view.activeGit.error}
-          <button className="link" onClick={() => setShowSettings(true)}>
-            Open settings
-          </button>
+    <div className="layout">
+      <aside className="sidebar">
+        <div className="workspace-brand">
+          <img src={logo} alt="" />
+          <strong>CloneFleet</strong>
         </div>
-      )}
-
-      {
         <WorkspaceBar
           roots={manager.workspace.roots}
+          recent={manager.workspace.recent}
           excludedCount={manager.workspace.excludedCount}
-          onRemoveDirectory={(path) => {
-            if (filters.directory === path) setFilters({ ...filters, directory: "" });
+          directory={directory}
+          onDirectory={changeDirectory}
+          onAdd={manager.addDirectories}
+          onOpen={() => {
+            changeDirectory("");
+            void manager.openDirectories();
+          }}
+          onOpenRecent={(roots) => {
+            changeDirectory("");
+            setFilters(defaultFilters);
+            void manager.openRecent(roots);
+          }}
+          onClearRecent={manager.clearRecent}
+          onCloseDirectory={(path) => {
+            if (directory === path) changeDirectory("");
             void manager.removeDirectory(path);
+          }}
+          onCloseAll={() => {
+            changeDirectory("", "overview");
+            setFilters(defaultFilters);
+            setDetail(undefined);
+            void manager.closeAllDirectories();
           }}
           onRescan={manager.rescan}
           onRestoreExcluded={manager.restoreExcluded}
         />
-      }
+        <nav aria-label="Main navigation">
+          {NAV_ITEMS.map(([kind, label]) => (
+            <button
+              key={kind}
+              aria-current={section === kind ? "page" : undefined}
+              onClick={() => navigate(kind)}
+            >
+              <Icon name={kind} />
+              {label}
+              {kind === "activity" && (runSummary?.running ?? 0) > 0 && (
+                <span className="activity-count"> {runSummary?.running}</span>
+              )}
+            </button>
+          ))}
+        </nav>
+        <button disabled={!settings.view} onClick={() => setShowSettings(true)}>
+          <Icon name="settings" />
+          Settings
+        </button>
+      </aside>
+      <main className="content">
+        {settings.view?.activeGit.error && (
+          <div className="notice error" role="alert">
+            {settings.view.activeGit.error}
+            <button className="link" onClick={() => setShowSettings(true)}>
+              Open settings
+            </button>
+          </div>
+        )}
 
-      {manager.notice && (
-        <div className="notice" role="status">
-          {manager.notice}
-          <button onClick={manager.dismissNotice} aria-label="Close notice">
-            Close
-          </button>
-        </div>
-      )}
+        {manager.notice && (
+          <div className="notice" role="status">
+            {manager.notice}
+            <button onClick={manager.dismissNotice} aria-label="Close notice">
+              Close
+            </button>
+          </div>
+        )}
 
-      {state.order.length === 0 ? (
-        <p className="empty muted">
-          {manager.workspace.roots.length === 0
-            ? "No directories open. Open a directory to scan it for git repositories."
-            : "No git repositories found in the open directories."}
-        </p>
-      ) : (
-        <div className="layout">
-          <nav className="sidebar" aria-label="Sections">
-            {navItems.slice(0, 2).map(navButton)}
-
-            <div className="sidebar-heading">Tools</div>
-
-            {navItems.slice(2, 6).map(navButton)}
-
-            <hr className="sidebar-divider" />
-
-            {navItems.slice(6).map(navButton)}
-          </nav>
-
-          <div className="content">
-            {listPage && manager.lastRun && runSummary && (
+        {state.order.length === 0 && page.kind !== "activity" ? (
+          <div className="empty muted first-run">
+            <p>
+              {manager.workspace.roots.length === 0
+                ? "No directories open. Open a directory to scan it for git repositories."
+                : "No git repositories found in the open directories."}
+            </p>
+            <button className="primary-button" onClick={manager.addDirectories}>
+              Add directory…
+            </button>
+          </div>
+        ) : (
+          <>
+            {tabs && (
+              <>
+                <header className="page-heading">
+                  <h1>{section === "repos" ? "Repositories" : "Cleanup"}</h1>
+                  <p className="muted">{scopeSummary}</p>
+                </header>
+                <nav
+                  className="view-tabs"
+                  aria-label={section === "repos" ? "Repository views" : "Cleanup views"}
+                >
+                  {tabs.map(([kind, label]) => (
+                    <button
+                      key={kind}
+                      aria-current={page.kind === kind ? "page" : undefined}
+                      onClick={() => navigate(kind)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </nav>
+              </>
+            )}
+            {summaryVisible && manager.lastRun && runSummary && (
               <RunSummaryBar
                 label={manager.lastRun.label}
                 summary={runSummary}
@@ -333,47 +408,45 @@ function App() {
 
             {page.kind === "overview" && (
               <Dashboard
-                paths={state.order}
+                paths={scopePaths}
                 states={state.repos}
                 healths={fleet.healths}
                 reclaimable={reclaimable}
-                pendingScans={fleet.pending}
+                pendingScans={
+                  scopePaths.filter((path) => !fleet.entries[path] || fleet.inFlight.has(path))
+                    .length
+                }
                 lastScannedUnix={fleet.lastScannedUnix}
                 nowUnix={nowUnix}
-                freshness={fleetFreshness(state.order, state.repos)}
+                freshness={fleetFreshness(scopePaths, state.repos)}
+                scopeSummary={scopeSummary}
                 busy={anyBusy}
-                onFix={fix}
+                onOpenFinding={openFinding}
                 onShow={show}
-                onFetchAll={() => runOn(state.order, { type: "fetch" })}
-                onRescan={() => {
-                  void manager.refreshSummaries(state.order);
-                  void fleet.scan(state.order);
-                  void artifactScan.scan(state.order);
-                }}
+                onFetchAll={() => runOn(scopePaths, { type: "fetch" })}
+                onRescan={refreshScope}
               />
             )}
 
-            {scoped && (
-              <div className="toolbar">
-                <span className="chip path-filter">
-                  Showing {scoped.paths.length} of {state.order.length} repositories
-                  <button
-                    className="chip-remove"
-
-                    aria-label="Show all repositories"
-
-                    onClick={() => setPage({ ...scoped, paths: state.order })}
-                  >
-                    ×
-                  </button>
+            {page.paths && (
+              <div className="toolbar scope-line">
+                <span>
+                  Showing {toolPaths.length} of {scopePaths.length} repositories
                 </span>
+                <button
+                  className="link"
+                  onClick={() => setPage({ kind: page.kind, category: page.category })}
+                >
+                  Clear repository scope
+                </button>
               </div>
             )}
 
             {page.kind === "cleanup" && (
               <CleanupView
-                key={page.paths.join("\n")}
-                paths={page.paths}
+                key={`${toolPaths.join("\n")}:${page.category ?? ""}`}
+                paths={toolPaths}
+                initialCategory={page.category}
                 onChanged={changed}
                 onOpenBranch={(path, branch) => setDetail({ path, tab: "branches", branch })}
               />
@@ -381,21 +454,26 @@ function App() {
 
             {page.kind === "artifacts" && (
               <ArtifactsView
-                key={page.paths.join("\n")}
-                paths={page.paths}
+                key={toolPaths.join("\n")}
+                paths={toolPaths}
                 scans={artifactScan.scans}
                 onRescan={artifactScan.scan}
               />
             )}
 
             {page.kind === "unpushed" && (
-              <UnpushedView key={page.paths.join("\n")} paths={page.paths} onChanged={changed} />
+              <UnpushedView
+                key={`${toolPaths.join("\n")}:${page.localWork ?? ""}`}
+                paths={toolPaths}
+                initialFilter={page.localWork}
+                onChanged={changed}
+              />
             )}
 
             {page.kind === "inactive" && (
               <InactiveView
-                key={page.paths.join("\n")}
-                paths={page.paths}
+                key={toolPaths.join("\n")}
+                paths={toolPaths}
                 onRemoved={() => void manager.reloadWorkspace()}
               />
             )}
@@ -403,140 +481,162 @@ function App() {
             {page.kind === "activity" && <ActivityView />}
 
             {page.kind === "remotes" && (
-              <RemotesView key={page.paths.join("\n")} paths={page.paths} runJobs={runJobs} />
+              <RemotesView key={toolPaths.join("\n")} paths={toolPaths} runJobs={runJobs} />
             )}
 
             {page.kind === "repos" && (
               <>
-                <FilterBar
-                  filters={filters}
-                  directories={manager.workspace.roots.map((root) => root.path)}
-                  onChange={setFilters}
-                />
                 {pathFilter && (
-                  <div className="toolbar">
-                    <span className="chip path-filter">
-                      Showing: {pathFilter.label}
-                      <button
-                        className="chip-remove"
-                        aria-label="Show all repositories"
-                        onClick={() => setPathFilter(undefined)}
-                      >
-                        ×
-                      </button>
-                    </span>
+                  <div className="toolbar scope-line">
+                    <span>{pathFilter.label}</span>
+                    <button className="link" onClick={() => setPathFilter(undefined)}>
+                      Clear repository filter
+                    </button>
                   </div>
                 )}
-                <div className="toolbar freshness-row">
-                  <span className="muted">
-                    {visible.length} {visible.length === 1 ? "repository" : "repositories"}
-                  </span>
-                  <span className="freshness">
+                <div className="list-panel">
+                  <div className={`list-toolbar${targets.length ? " has-selection" : ""}`}>
+                    <FilterBar filters={filters} onChange={setFilters} />
+                    {targets.length > 0 ? (
+                      <ActionPanel
+                        selected={targets.length}
+                        hiddenSelected={hiddenSelected}
+                        busy={busy}
+                        onClear={() => manager.setSelection([...state.selected], false)}
+                        onRun={startAction}
+                        onReview={(kind) => setPage({ kind, paths: targets })}
+                        onRefresh={() => changed(targets)}
+                        onRemove={() => manager.removeRepos(targets)}
+                      />
+                    ) : (
+                      <div className="toolbar list-actions">
+                        {hiddenSelected > 0 && (
+                          <button
+                            className="link"
+                            onClick={() => manager.setSelection([...state.selected], false)}
+                          >
+                            Clear {hiddenSelected} hidden{" "}
+                            {hiddenSelected === 1 ? "selection" : "selections"}
+                          </button>
+                        )}
+                        <button
+                          className="primary-button"
+                          disabled={
+                            visible.length === 0 ||
+                            visible.some((path) => isBusy(state.repos[path]))
+                          }
+                          onClick={() => runOn(visible, { type: "fetch" })}
+                        >
+                          {visible.length === scopePaths.length
+                            ? `Fetch all ${visible.length}`
+                            : `Fetch ${visible.length} matching`}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="list-context muted">
+                    <span>
+                      {visible.length} {visible.length === 1 ? "repository" : "repositories"}
+                    </span>
                     <span
                       className={
                         isStale(nowUnix, freshness.oldestFetchUnix) || freshness.neverFetched > 0
                           ? "stale"
-                          : "muted"
+                          : ""
                       }
                     >
-                      {freshness.oldestFetchUnix === null
-                        ? "Never fetched"
-                        : `Oldest fetch ${formatRecent(nowUnix, freshness.oldestFetchUnix)}`}
+                      {freshness.oldestFetchUnix !== null &&
+                        `Oldest fetch ${formatRecent(nowUnix, freshness.oldestFetchUnix)}`}
                       {freshness.neverFetched > 0 &&
-                        freshness.oldestFetchUnix !== null &&
-                        ` · ${freshness.neverFetched} never fetched`}
+                        `${freshness.oldestFetchUnix !== null ? " · " : ""}${freshness.neverFetched} never fetched`}
                     </span>
-                    <button
-                      disabled={visible.length === 0 || visible.some((p) => isBusy(state.repos[p]))}
-                      onClick={() => runOn(visible, { type: "fetch" })}
-                    >
-                      Fetch all {visible.length}
-                    </button>
-                  </span>
+                  </div>
+                  <div className="list-table-scroll">
+                    <table className="repo-table">
+                      <colgroup>
+                        <col style={{ width: "36px" }} />
+                        <col style={{ width: "27%" }} />
+                        <col style={{ width: "17%" }} />
+                        <col style={{ width: "15%" }} />
+                        <col style={{ width: "16%" }} />
+                        <col />
+                        <col style={{ width: "72px" }} />
+                      </colgroup>
+                      <thead>
+                        <tr>
+                          <th>
+                            <TriStateCheckbox
+                              label="Select all matching repositories"
+                              names={visible}
+                              isSelected={(path) => state.selected.has(path)}
+                              onSetSelected={manager.setSelection}
+                            />
+                          </th>
+                          {sortHeader("name", "Repository")}
+                          {sortHeader("branch", "Branch")}
+                          {sortHeader("changes", "Working tree")}
+                          {sortHeader("sync", "Upstream")}
+                          {sortHeader("result", "Last result")}
+                          <th />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visible.map((path) => (
+                          <RepoRow
+                            key={path}
+                            repo={state.repos[path]}
+                            label={repoLabels.get(path)}
+                            selected={state.selected.has(path)}
+                            nowUnix={nowUnix}
+                            onToggle={(extendRange) => toggle(path, extendRange)}
+                            onAction={(action) => manager.runAction([path], action)}
+                            onFollowUp={(action) => runFollowUp(path, action)}
+                            onOpenDetails={(tab) => setDetail({ path, tab })}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                    {visible.length === 0 && (
+                      <p className="empty muted">No repositories match the current filters.</p>
+                    )}
+                  </div>
                 </div>
-
-                <SelectionLine
-                  selected={targets.length}
-
-                  visible={visible.length}
-
-                  hiddenSelected={hiddenSelected}
-
-                  onSelectAll={() => manager.setSelection(visible, true)}
-
-                  onClear={() => manager.setSelection([...state.selected], false)}
-                />
-
-                <table className="repo-table">
-                  <colgroup>
-                    <col style={{ width: "36px" }} />
-                    <col style={{ width: "27%" }} />
-                    <col style={{ width: "17%" }} />
-                    <col style={{ width: "15%" }} />
-                    <col style={{ width: "16%" }} />
-                    <col />
-                    <col style={{ width: "72px" }} />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th>
-                        <input
-                          type="checkbox"
-                          aria-label="Select all"
-                          checked={allVisibleSelected}
-                          disabled={visible.length === 0}
-                          onChange={() => manager.setSelection(visible, !allVisibleSelected)}
-                        />
-                      </th>
-                      {sortHeader("name", "Repository")}
-                      {sortHeader("branch", "Branch")}
-                      {sortHeader("changes", "Changes")}
-                      {sortHeader("sync", "Sync")}
-                      {sortHeader("result", "Last result")}
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visible.map((path) => (
-                      <RepoRow
-                        key={path}
-                        repo={state.repos[path]}
-                        selected={state.selected.has(path)}
-                        nowUnix={nowUnix}
-                        onToggle={(extendRange) => toggle(path, extendRange)}
-                        onAction={(action) => manager.runAction([path], action)}
-                        onFollowUp={(action) => runFollowUp(path, action)}
-                        onOpenDetails={(tab) => setDetail({ path, tab })}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-                {visible.length === 0 && (
-                  <p className="empty muted">No repositories match the current filters.</p>
-                )}
-
-                <ActionPanel
-                  selected={targets.length}
-
-                  hiddenSelected={hiddenSelected}
-
-                  busy={busy}
-
-                  onRun={(action) => runOn(targets, action)}
-
-                  onReview={(kind) => setPage({ kind, paths: targets })}
-
-                  onRefresh={() => changed(targets)}
-
-                  onRemove={() => manager.removeRepos(targets)}
-                />
               </>
             )}
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </main>
 
-      {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
+      {review && (
+        <ReviewDialog
+          title={reviewTitle}
+          summary={reviewCount}
+          confirmLabel={
+            review.action.type === "pull" ? `Pull ${reviewCount}` : `Switch ${reviewCount}`
+          }
+          onClose={() => setReview(undefined)}
+          onConfirm={() => {
+            setReview(undefined);
+            void runOn(review.paths, review.action);
+          }}
+        >
+          <p>
+            {review.action.type === "pull"
+              ? "Pull updates on the checked-out branches with a fast-forward only."
+              : "Switch each repository to its default branch."}
+          </p>
+          <ul className="review-targets">
+            {review.paths.map((path) => (
+              <li key={path}>
+                <code>{path}</code>
+                {state.repos[path]?.summary?.branch && (
+                  <div className="muted">{state.repos[path].summary.branch}</div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </ReviewDialog>
+      )}
       {showSettings && settings.view && (
         <SettingsDialog
           view={settings.view}
@@ -560,7 +660,7 @@ function App() {
           onSettingsSaved={() => changed([detail.path])}
         />
       )}
-    </main>
+    </div>
   );
 }
 

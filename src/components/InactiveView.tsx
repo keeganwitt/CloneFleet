@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { recordAction, summarizeItems } from "../activityLog";
 import { api } from "../api";
 import { formatAge } from "../cleanup";
-import { basename } from "../format";
+import { basename, uniqueLabels } from "../format";
 import {
   type InactiveSort,
   type InactiveSortKey,
@@ -12,6 +12,10 @@ import {
   nextInactiveSort,
 } from "../inactive";
 import type { CloneActivity, ItemOutcome } from "../types";
+
+import { CleanupToolbar } from "./CleanupToolbar";
+import { ReviewDialog } from "./ReviewDialog";
+import { TriStateCheckbox } from "./BranchTree";
 
 type RepoActivity =
   | { status: "loading" }
@@ -84,6 +88,8 @@ export function InactiveView({ paths, onRemoved }: Props) {
   const [activities, setActivities] = useState<Record<string, RepoActivity>>(() =>
     Object.fromEntries(paths.map((repo) => [repo, { status: "loading" }])),
   );
+  const [query, setQuery] = useState("");
+  const [review, setReview] = useState<readonly (readonly [string, CloneActivity])[]>();
   const [commitFilter, setCommitFilter] = useState(true);
   const [commitDays, setCommitDays] = useState(DEFAULT_DAYS);
   const [activityFilter, setActivityFilter] = useState(true);
@@ -130,18 +136,23 @@ export function InactiveView({ paths, onRemoved }: Props) {
     const entry = activities[repo];
     return entry?.status === "error" ? [[repo, entry.error] as const] : [];
   });
+  const labels = uniqueLabels(paths);
   const shown = loaded
-    .filter(([, activity]) =>
-      isInactive(
-        activity,
-        nowUnix,
-        commitFilter ? commitDays : null,
-        activityFilter ? activityDays : null,
-      ),
+    .filter(
+      ([repo, activity]) =>
+        repo.toLowerCase().includes(query.trim().toLowerCase()) &&
+        isInactive(
+          activity,
+          nowUnix,
+          commitFilter ? commitDays : null,
+          activityFilter ? activityDays : null,
+        ),
     )
     .sort((a, b) => compareInactive(a, b, sort, basename));
   const targets = shown.filter(([repo]) => selected.has(repo));
-  const allSelected = shown.length > 0 && targets.length === shown.length;
+  const pending = loaded.length + failed.length < present.length;
+  const atRisk =
+    review?.filter(([, activity]) => describeRisks(activity.risks).length > 0).length ?? 0;
 
   const toggle = (repo: string) =>
     setSelected((current) => {
@@ -150,28 +161,12 @@ export function InactiveView({ paths, onRemoved }: Props) {
       return next;
     });
 
-  const moveToTrash = async () => {
-    const details = targets.map(([repo, activity]) => {
-      const risks = describeRisks(activity.risks);
-      const body =
-        risks.length === 0
-          ? "  Nothing found that the remote doesn't have."
-          : risks.map((risk) => `  • ${risk}`).join("\n");
-      return `${repo}\n${body}`;
-    });
-    const atRisk = targets.filter(([, a]) => describeRisks(a.risks).length > 0).length;
-    const message =
-      `Move ${plural(targets.length, "clone")} to the Trash?\n\n` +
-      (atRisk > 0
-        ? `${plural(atRisk, "clone has", "clones have")} work that would only be in the Trash afterward.\n\n`
-        : "") +
-      details.join("\n\n");
-    if (!(await api.confirmDestructive(message, "Move to Trash"))) return;
-
+  const moveToTrash = async (approved: readonly (readonly [string, CloneActivity])[]) => {
+    setReview(undefined);
     setBusy(true);
     try {
       const outcomes = await Promise.all(
-        targets.map(async ([repo, activity]): Promise<[string, ItemOutcome[]]> => {
+        approved.map(async ([repo, activity]): Promise<[string, ItemOutcome[]]> => {
           try {
             const result = await api.trashClone(repo, {
               risks: activity.risks,
@@ -191,7 +186,9 @@ export function InactiveView({ paths, onRemoved }: Props) {
       );
       setResults(outcomes.flatMap(([, items]) => items));
       const gone = outcomes
-        .filter(([, items]) => items.every((item) => item.status === "succeeded"))
+        .filter(
+          ([, items]) => items.length > 0 && items.every((item) => item.status === "succeeded"),
+        )
         .map(([repo]) => repo);
       setRemoved((current) => new Set([...current, ...gone]));
       setSelected(new Set());
@@ -221,41 +218,48 @@ export function InactiveView({ paths, onRemoved }: Props) {
     timestamp === null ? "Never" : formatAge(nowUnix, timestamp);
 
   return (
-    <div className="cleanup">
-      <div className="toolbar">
-        <h2>Inactive clones</h2>
-        <button disabled={busy} onClick={() => analyze(present)}>
-          Re-analyze
-        </button>
-      </div>
-
-      <div className="toolbar">
-        <span className="muted">
-          {loaded.length + failed.length < present.length
-            ? `Analyzed ${loaded.length + failed.length} of ${present.length}…`
-            : `${shown.length} of ${plural(present.length, "repository", "repositories")} ${
-                shown.length === 1 ? "looks" : "look"
-              } inactive`}
-        </span>
-        <DaysFilter
-          label="Last commit by me older than"
-          inputLabel="Days since my last commit"
-          enabled={commitFilter}
-          days={commitDays}
-          onEnabled={setCommitFilter}
-          onDays={setCommitDays}
+    <section className="list-panel cleanup-panel" aria-label="Inactive clones">
+      <CleanupToolbar
+        selected={targets.length}
+        busy={busy}
+        analyzeDisabled={pending}
+        onAnalyze={() => void analyze(present)}
+        reviewLabel={`Review ${plural(targets.length, "clone")}…`}
+        onReview={() => setReview(targets)}
+        onClear={() => setSelected(new Set())}
+      >
+        <input
+          type="search"
+          aria-label="Search clones"
+          placeholder="Find repository"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
         />
-        <DaysFilter
-          label="Last local activity older than"
-          inputLabel="Days since last local activity"
-          enabled={activityFilter}
-          days={activityDays}
-          onEnabled={setActivityFilter}
-          onDays={setActivityDays}
-        />
-        <button disabled={busy || targets.length === 0} onClick={moveToTrash}>
-          Move {plural(targets.length, "clone")} to the Trash
-        </button>
+        <div className="inactive-age-filter">
+          <DaysFilter
+            label="Last commit by me older than"
+            inputLabel="Days since my last commit"
+            enabled={commitFilter}
+            days={commitDays}
+            onEnabled={setCommitFilter}
+            onDays={setCommitDays}
+          />
+        </div>
+        <div className="inactive-age-filter">
+          <DaysFilter
+            label="Last local activity older than"
+            inputLabel="Days since last local activity"
+            enabled={activityFilter}
+            days={activityDays}
+            onEnabled={setActivityFilter}
+            onDays={setActivityDays}
+          />
+        </div>
+      </CleanupToolbar>
+      <div className="list-context" role="status">
+        {pending
+          ? `Analyzed ${loaded.length + failed.length} of ${present.length}…`
+          : `${shown.length} of ${plural(present.length, "repository", "repositories")} ${shown.length === 1 ? "looks" : "look"} inactive`}
       </div>
 
       {results.length > 0 && (
@@ -275,68 +279,124 @@ export function InactiveView({ paths, onRemoved }: Props) {
       ))}
 
       {shown.length > 0 && (
-        <table>
-          <thead>
-            <tr>
-              <th>
-                <input
-                  type="checkbox"
-                  aria-label="Select all shown clones"
-                  checked={allSelected}
-                  onChange={() =>
-                    setSelected(allSelected ? new Set() : new Set(shown.map(([repo]) => repo)))
-                  }
-                />
-              </th>
-              {sortHeader("name", "Repository")}
-              {sortHeader("lastCommit", "Last commit by me")}
-              {sortHeader("lastActivity", "Last local activity", ACTIVITY_HELP)}
-              <th>At risk</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map(([repo, activity]) => {
+        <div className="list-table-scroll">
+          <table className="cleanup-table">
+            <colgroup>
+              <col className="selection-column" />
+              <col style={{ width: "28%" }} />
+              <col style={{ width: "16%" }} />
+              <col style={{ width: "18%" }} />
+              <col />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>
+                  <TriStateCheckbox
+                    label="Select all shown clones"
+                    names={shown.map(([repo]) => repo)}
+                    isSelected={(repo) => selected.has(repo)}
+                    onSetSelected={(repos, checked) =>
+                      setSelected((current) => {
+                        const next = new Set(current);
+                        for (const repo of repos) {
+                          if (checked) next.add(repo);
+                          else next.delete(repo);
+                        }
+                        return next;
+                      })
+                    }
+                  />
+                </th>
+                {sortHeader("name", "Repository")}
+                {sortHeader("lastCommit", "My last commit")}
+                {sortHeader("lastActivity", "Last local activity", ACTIVITY_HELP)}
+                <th>Local data</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map(([repo, activity]) => {
+                const risks = describeRisks(activity.risks);
+                return (
+                  <tr key={repo} className={selected.has(repo) ? "selected" : undefined}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${labels.get(repo)}`}
+                        checked={selected.has(repo)}
+                        onChange={() => toggle(repo)}
+                      />
+                    </td>
+                    <td>
+                      <strong title={repo}>{labels.get(repo)}</strong>
+                      {activity.warnings.map((warning) => (
+                        <div key={warning} className="outcome-skipped">
+                          {warning}
+                        </div>
+                      ))}
+                    </td>
+                    <td>{age(activity.lastCommitByMeUnix)}</td>
+                    <td>{age(activity.lastLocalActivityUnix)}</td>
+                    <td>
+                      {risks.length === 0 ? (
+                        <span className="muted">No local-only data found</span>
+                      ) : (
+                        <ul className="change-list">
+                          {risks.map((risk) => (
+                            <li key={risk} className="outcome-skipped">
+                              {risk}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {!pending && shown.length === 0 && (
+        <p className="list-message muted">No clones match these filters.</p>
+      )}
+      {review && (
+        <ReviewDialog
+          title="Review clones to move to Trash"
+          summary={plural(review.length, "local clone")}
+          confirmLabel={`Move ${plural(review.length, "clone")} to Trash`}
+          danger
+          onConfirm={() => void moveToTrash(review)}
+          onClose={() => setReview(undefined)}
+        >
+          {atRisk > 0 && (
+            <p className="review-warning">
+              <strong>Local data in {plural(atRisk, "clone")}</strong>
+              <br />
+              Review this data before moving the clones to the Trash.
+            </p>
+          )}
+          <h3>Clones and local data</h3>
+          <ul className="review-targets">
+            {review.map(([repo, activity]) => {
               const risks = describeRisks(activity.risks);
               return (
-                <tr key={repo}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      aria-label={`Select ${basename(repo)}`}
-                      checked={selected.has(repo)}
-                      onChange={() => toggle(repo)}
-                    />
-                  </td>
-                  <td>
-                    {basename(repo)}
-                    <div className="muted repo-path">{repo}</div>
-                    {activity.warnings.map((warning) => (
-                      <div key={warning} className="outcome-skipped">
-                        {warning}
-                      </div>
-                    ))}
-                  </td>
-                  <td>{age(activity.lastCommitByMeUnix)}</td>
-                  <td>{age(activity.lastLocalActivityUnix)}</td>
-                  <td>
-                    {risks.length === 0 ? (
-                      <span className="outcome-succeeded">Nothing found</span>
-                    ) : (
-                      <ul className="change-list">
-                        {risks.map((risk) => (
-                          <li key={risk} className="outcome-skipped">
-                            {risk}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </td>
-                </tr>
+                <li key={repo}>
+                  <code>{repo}</code>
+                  {risks.length ? (
+                    <ul className="review-risks">
+                      {risks.map((risk) => (
+                        <li key={risk}>{risk}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="muted">No local-only data found</div>
+                  )}
+                </li>
               );
             })}
-          </tbody>
-        </table>
+          </ul>
+        </ReviewDialog>
       )}
-    </div>
+    </section>
   );
 }
