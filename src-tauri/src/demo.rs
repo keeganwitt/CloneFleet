@@ -7,6 +7,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use crate::store::Config;
 
 pub const MARKER: &str = ".clonefleet-demo";
+pub(crate) const DEMO_ENV: &str = "CLONEFLEET_DEMO";
 const DAY: i64 = 24 * 60 * 60;
 const HOUR: i64 = 60 * 60;
 
@@ -20,6 +21,7 @@ pub struct DemoEnv {
 impl DemoEnv {
     pub fn variables(&self) -> Vec<(&'static str, String)> {
         vec![
+            (DEMO_ENV, "1".to_string()),
             (
                 "CLONEFLEET_CONFIG_DIR",
                 self.config_dir.display().to_string(),
@@ -810,6 +812,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("demo");
         let env = write_demo_home(&root).unwrap();
+        assert!(env.variables().contains(&(DEMO_ENV, "1".to_string())));
         assert!(root.join(MARKER).exists());
         write_demo_home(&root).expect("rerunning replaces an earlier demo home");
 

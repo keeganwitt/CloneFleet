@@ -48,6 +48,7 @@ The launcher sets these variables for CloneFleet and every git command it runs:
 
 | Variable                | Points at                                                           |
 | ----------------------- | ------------------------------------------------------------------- |
+| `CLONEFLEET_DEMO`       | `1`, so the native window title reads **CloneFleet** in screenshots |
 | `CLONEFLEET_CONFIG_DIR` | `config/` in the demo home (directories, recent sets, settings)     |
 | `GIT_CONFIG_GLOBAL`     | the demo's `gitconfig` (author, URL rewrites, no hooks, no signing) |
 | `GIT_CONFIG_NOSYSTEM`   | `1`, so system-wide git settings don't apply                        |

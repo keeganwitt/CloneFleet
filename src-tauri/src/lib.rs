@@ -588,6 +588,10 @@ async fn trash_clone(
     Ok(result)
 }
 
+fn dev_title(debug_build: bool, demo: bool) -> Option<&'static str> {
+    (debug_build && !demo).then_some("CloneFleet (dev)")
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -599,6 +603,13 @@ pub fn run() {
             };
             let config_path = config_dir.join("config.json");
             app.manage(AppState::new(config_path)?);
+            let is_demo = std::env::var_os(demo::DEMO_ENV).is_some();
+            if let Some(title) = dev_title(cfg!(debug_assertions), is_demo)
+                && let Some(window) = app.get_webview_window("main")
+                && let Err(error) = window.set_title(title)
+            {
+                eprintln!("Couldn't set the window title: {error}");
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -648,6 +659,14 @@ mod tests {
     use std::fs;
 
     use super::*;
+
+    #[test]
+    fn titles_debug_builds_except_on_demo_data() {
+        assert_eq!(dev_title(true, false), Some("CloneFleet (dev)"));
+        assert_eq!(dev_title(true, true), None);
+        assert_eq!(dev_title(false, false), None);
+        assert_eq!(dev_title(false, true), None);
+    }
 
     #[tokio::test]
     async fn workspace_changes_persist_and_guard_known_repos() {
