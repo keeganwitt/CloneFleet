@@ -84,6 +84,8 @@ function mockBackend(backend: Backend) {
           warnings: [],
           ...backend.health?.[args.path as string],
         };
+      case "plugin:app|version":
+        return "1.0.0";
       case "get_settings":
         return {
           settings: {
@@ -508,18 +510,20 @@ describe("App", () => {
     });
     await renderRepositories();
     await screen.findByText("alpha");
-    await user.click(screen.getByText("Workspace commands"));
-    await user.click(screen.getByRole("button", { name: "Replace open directories…" }));
+    const directories = within(screen.getByRole("group", { name: "Directories" }));
+    await user.click(directories.getByText("Manage directories"));
+    expect(directories.getByRole("button", { name: "Add directory…" })).toBeVisible();
+    await user.click(directories.getByRole("button", { name: "Replace open directories…" }));
 
     expect(await screen.findByText("Opened picked: 1 repository")).toBeInTheDocument();
     expect(screen.getByText("one")).toBeInTheDocument();
     expect(screen.queryByText("alpha")).not.toBeInTheDocument();
     expect(calls.find((c) => c.cmd === "open_directories")?.args).toEqual({ paths: ["/picked"] });
 
-    await user.selectOptions(screen.getByLabelText("Open recent"), "src");
+    await user.selectOptions(directories.getByLabelText("Open recent"), "src");
     expect(calls.find((c) => c.cmd === "open_recent")?.args).toEqual({ roots: ["/src"] });
 
-    await user.selectOptions(screen.getByLabelText("Open recent"), "Clear recent");
+    await user.selectOptions(directories.getByLabelText("Open recent"), "Clear recent");
     await waitFor(() => expect(calls.some((c) => c.cmd === "clear_recent")).toBe(true));
   });
 
@@ -750,6 +754,28 @@ describe("App", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("git was not found");
     await user.click(screen.getByRole("button", { name: "Open settings" }));
     expect(screen.getByRole("dialog", { name: "Settings" })).toBeInTheDocument();
+  });
+
+  it("opens About from Settings and preserves unsaved changes when returning", async () => {
+    const user = userEvent.setup();
+    mockBackend({ repos: [] });
+    render(<App />);
+
+    const sidebar = screen.getByRole("complementary");
+    const settings = within(sidebar).getByRole("button", { name: "Settings" });
+    await waitFor(() => expect(settings).toBeEnabled());
+    await user.click(settings);
+    const dialog = screen.getByRole("dialog", { name: "Settings" });
+    await user.click(within(dialog).getByRole("radio", { name: "Dark" }));
+    await user.click(within(dialog).getByRole("button", { name: "About CloneFleet" }));
+    const about = screen.getByRole("dialog", { name: "About CloneFleet" });
+    expect(await within(about).findByText("1.0.0")).toBeVisible();
+    await user.click(within(about).getByRole("button", { name: "Back to Settings" }));
+    expect(screen.getByRole("radio", { name: "Dark" })).toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: "About CloneFleet" }));
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("dialog", { name: "Settings" })).toBeVisible();
   });
 
   it("adds repositories discovered in a picked directory", async () => {

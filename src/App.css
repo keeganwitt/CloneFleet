@@ -980,7 +980,8 @@ h3 .repo-path {
   margin: 8px 0;
 }
 
-.sidebar nav button {
+.sidebar nav button,
+.sidebar > button {
   padding: 10px 12px;
 }
 

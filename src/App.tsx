@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { api } from "./api";
 import { formatRecent } from "./cleanup";
-import { AboutDialog } from "./components/AboutDialog";
 import { ActionPanel } from "./components/ActionBar";
 import { TriStateCheckbox } from "./components/BranchTree";
 import { ActivityView } from "./components/ActivityView";
@@ -104,7 +103,6 @@ function App() {
   const workspaceCount = manager.workspace.roots.length;
   const scopeSummary = `${scopePaths.length} ${scopePaths.length === 1 ? "repository" : "repositories"}${scopeLabel ? ` in ${scopeLabel}` : ` across ${workspaceCount} ${workspaceCount === 1 ? "directory" : "directories"}`}`;
   const [showSettings, setShowSettings] = useState(false);
-  const [showAbout, setShowAbout] = useState(false);
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [pathFilter, setPathFilter] = useState<{ label: string; paths: string[] }>();
   const [resultFilter, setResultFilter] = useState<RunStatus>();
@@ -242,10 +240,6 @@ function App() {
   };
 
   const listPage = page.kind === "overview" || page.kind === "repos";
-  const recentLabels = uniqueLabels([
-    ...manager.workspace.roots.map((root) => root.path),
-    ...manager.workspace.recent.flat(),
-  ]);
   const tabs =
     section === "repos" ? REPOSITORY_TABS : section === "cleanup" ? CLEANUP_TABS : undefined;
   const reviewTitle = review?.action.type === "pull" ? "Review pull" : "Review branch switch";
@@ -263,10 +257,21 @@ function App() {
         </div>
         <WorkspaceBar
           roots={manager.workspace.roots}
+          recent={manager.workspace.recent}
           excludedCount={manager.workspace.excludedCount}
           directory={directory}
           onDirectory={changeDirectory}
           onAdd={manager.addDirectories}
+          onOpen={() => {
+            changeDirectory("");
+            void manager.openDirectories();
+          }}
+          onOpenRecent={(roots) => {
+            changeDirectory("");
+            setFilters(defaultFilters);
+            void manager.openRecent(roots);
+          }}
+          onClearRecent={manager.clearRecent}
           onRemoveDirectory={(path) => {
             if (directory === path) changeDirectory("");
             void manager.removeDirectory(path);
@@ -288,49 +293,9 @@ function App() {
             </button>
           ))}
         </nav>
-        <details className="toolbar-menu workspace-menu">
-          <summary>Workspace commands</summary>
-          <div className="toolbar-menu-content">
-            <button
-              onClick={() => {
-                changeDirectory("");
-                void manager.openDirectories();
-              }}
-            >
-              {manager.workspace.roots.length ? "Replace open directories…" : "Open directory…"}
-            </button>
-            {manager.workspace.recent.length > 0 && (
-              <select
-                aria-label="Open recent"
-                value=""
-                onChange={(event) => {
-                  if (!event.target.value) return;
-                  if (event.target.value === "clear") void manager.clearRecent();
-                  else {
-                    const entry = manager.workspace.recent[Number(event.target.value)];
-                    if (entry) {
-                      changeDirectory("");
-                      setFilters(defaultFilters);
-                      void manager.openRecent(entry);
-                    }
-                  }
-                }}
-              >
-                <option value="">Open recent…</option>
-                {manager.workspace.recent.map((roots, index) => (
-                  <option key={roots.join("\n")} value={index}>
-                    {roots.map((root) => recentLabels.get(root)).join(" + ")}
-                  </option>
-                ))}
-                <option value="clear">Clear recent</option>
-              </select>
-            )}
-            <button onClick={() => setShowAbout(true)}>About</button>
-            <button disabled={!settings.view} onClick={() => setShowSettings(true)}>
-              Settings
-            </button>
-          </div>
-        </details>
+        <button disabled={!settings.view} onClick={() => setShowSettings(true)}>
+          Settings
+        </button>
       </aside>
       <main className="content">
         {settings.view?.activeGit.error && (
@@ -663,7 +628,6 @@ function App() {
           </ul>
         </ReviewDialog>
       )}
-      {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
       {showSettings && settings.view && (
         <SettingsDialog
           view={settings.view}

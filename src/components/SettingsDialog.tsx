@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { formatWebHosts, parseWebHosts } from "../remoteUrls";
 import type { AppSettings, GitInfo, LaunchTarget, SettingsView, Theme } from "../types";
+import { AboutDialog } from "./AboutDialog";
 
 interface LaunchFieldProps {
   label: string;
@@ -79,12 +80,14 @@ export function SettingsDialog({ view, onSave, onClose }: Props) {
   const [extraIdentities, setExtraIdentities] = useState(view.settings.extraIdentities.join("\n"));
   const [check, setCheck] = useState<GitInfo>();
   const [error, setError] = useState<string>();
+  const [showAbout, setShowAbout] = useState(false);
 
   useEffect(() => {
+    if (showAbout) return;
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, showAbout]);
 
   const test = async () => setCheck(await api.checkGit(gitPath));
   const browse = async () => {
@@ -116,11 +119,17 @@ export function SettingsDialog({ view, onSave, onClose }: Props) {
     }
   };
 
+  if (showAbout)
+    return <AboutDialog onClose={() => setShowAbout(false)} closeLabel="Back to Settings" />;
+
   const active = view.activeGit;
   return (
     <div className="modal-backdrop">
       <div className="modal" role="dialog" aria-modal="true" aria-label="Settings">
         <h2>Settings</h2>
+        <button className="link" onClick={() => setShowAbout(true)}>
+          About CloneFleet
+        </button>
         <fieldset>
           <legend>Git</legend>
           <label>
