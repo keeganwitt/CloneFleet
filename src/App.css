@@ -1326,6 +1326,13 @@ select {
   padding-bottom: 4px;
 }
 
+.workspace-subpanel .sidebar-icon,
+.workspace-panel-heading .sidebar-icon {
+  display: block;
+  color: inherit;
+  stroke-width: 3px;
+}
+
 .workspace-panel-heading > button:hover {
   background: var(--subtle);
 }

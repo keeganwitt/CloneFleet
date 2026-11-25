@@ -123,7 +123,7 @@ export function WorkspaceBar({
           {panel !== "scope" && (
             <div className="workspace-panel-heading">
               <button aria-label="Back to workspace" onClick={() => setPanel("scope")}>
-                <span aria-hidden="true">←</span>
+                <SidebarIcon name="chevronLeft" />
               </button>
               <strong>{panelLabel}</strong>
             </div>
@@ -163,14 +163,14 @@ export function WorkspaceBar({
               </button>
               {recent.length > 0 && (
                 <button className="workspace-subpanel" onClick={() => setPanel("recent")}>
-                  Open recent <span aria-hidden="true">→</span>
+                  Open recent <SidebarIcon name="chevronRight" />
                 </button>
               )}
               {roots.length > 0 && (
                 <>
                   <button onClick={() => activate(onRescan)}>Rescan directories</button>
                   <button className="workspace-subpanel" onClick={() => setPanel("manage")}>
-                    Manage open directories <span aria-hidden="true">→</span>
+                    Manage open directories <SidebarIcon name="chevronRight" />
                   </button>
                 </>
               )}

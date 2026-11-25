@@ -1,4 +1,6 @@
 const paths = {
+  chevronLeft: "m15 5-7 7 7 7",
+  chevronRight: "m9 5 7 7-7 7",
   workspace: "M3 7h6l2 2h10v10H3z",
   overview: "M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h6v6h-6z",
   repos: "M7 3h12a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M8 3v18 M11 7h6",
