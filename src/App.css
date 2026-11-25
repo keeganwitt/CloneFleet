@@ -632,6 +632,10 @@ input.days {
   margin: 0 0 16px;
 }
 
+.settings-about-link {
+  margin-bottom: 12px;
+}
+
 .modal fieldset label {
   flex-wrap: wrap;
 }

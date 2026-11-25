@@ -127,7 +127,7 @@ export function SettingsDialog({ view, onSave, onClose }: Props) {
     <div className="modal-backdrop">
       <div className="modal" role="dialog" aria-modal="true" aria-label="Settings">
         <h2>Settings</h2>
-        <button className="link" onClick={() => setShowAbout(true)}>
+        <button className="link settings-about-link" onClick={() => setShowAbout(true)}>
           About CloneFleet
         </button>
         <fieldset>
